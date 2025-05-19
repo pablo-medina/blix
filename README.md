@@ -1,6 +1,6 @@
 # Blix Game
 
-A Brix/Breakout style game made with Electron and JavaScript.
+A modern breakout game built with vanilla JavaScript and HTML5 Canvas.
 
 ## Requirements
 
