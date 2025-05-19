@@ -351,16 +351,88 @@ const backgroundMusic = new Audio('sounds/Neon Bricks Dance.mp3');
 backgroundMusic.loop = true;
 backgroundMusic.volume = 0.5; // You can adjust the volume if desired
 
-// Attempt to play initial music
+// Audio analysis variables
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let source = null;
+let audioInitialized = false;
+
+// Improved function to initialize audio
+function initAudioAnalysis() {
+    if (audioInitialized) {
+        console.debug("Audio analyzer already initialized");
+        return;
+    }
+
+    try {
+        // Create audio context only if it doesn't exist
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.debug("AudioContext created");
+        }
+
+        // Create analyzer
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.6;
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+        
+        // Connect music to analyzer
+        if (!source) {
+            source = audioContext.createMediaElementSource(backgroundMusic);
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+            console.debug("Audio source connected to analyzer");
+        }
+
+        // Events to monitor music state
+        backgroundMusic.addEventListener('play', () => {
+            console.debug("Music started - Analyzer active");
+            // Ensure audio context is running
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        });
+        
+        backgroundMusic.addEventListener('pause', () => {
+            console.debug("Music paused - Analyzer inactive");
+        });
+        
+        backgroundMusic.addEventListener('timeupdate', () => {
+            if (debugCounter % 30 === 0) { // Reduce log frequency
+                console.debug(`Current time: ${backgroundMusic.currentTime.toFixed(2)}s`);
+            }
+        });
+
+        audioInitialized = true;
+        console.debug("Audio analysis initialized successfully with FFT size:", analyser.fftSize);
+    } catch (error) {
+        console.debug("Error initializing audio analysis:", error);
+        // Don't reset variables here, we'll try to reinitialize later
+    }
+}
+
+// Modify initBackgroundMusic function to ensure correct initialization
 function initBackgroundMusic() {
+    // Try to initialize audio analysis
+    initAudioAnalysis();
+    
+    // Try to play music
     backgroundMusic.play().catch(error => {
-        console.debug("Error playing music, waiting for user interaction");
+        console.debug("Error playing music, waiting for user interaction:", error);
     });
 }
 
-// Attempt to play music when user interacts
+// Modify click event to ensure initialization
 document.addEventListener('click', function playOnClick() {
     if (backgroundMusic.paused) {
+        // Ensure audio is initialized
+        if (!audioInitialized) {
+            initAudioAnalysis();
+        }
+        
         backgroundMusic.play().then(() => {
             console.debug("Music started by user interaction");
             document.removeEventListener('click', playOnClick);
@@ -370,9 +442,14 @@ document.addEventListener('click', function playOnClick() {
     }
 });
 
-// Also attempt with keydown
+// Modify keydown event to ensure initialization
 const playOnKey = function(e) {
     if (backgroundMusic.paused) {
+        // Ensure audio is initialized
+        if (!audioInitialized) {
+            initAudioAnalysis();
+        }
+        
         backgroundMusic.play().then(() => {
             console.debug("Music started by user interaction (keyboard)");
             document.removeEventListener('keydown', playOnKey);
@@ -381,7 +458,6 @@ const playOnKey = function(e) {
         });
     }
 };
-document.addEventListener('keydown', playOnKey);
 
 // --- POWER-UPS ---
 const POWERUP_TYPES = [
@@ -796,64 +872,210 @@ function drawPaddle() {
     ctx.restore();
 }
 
+// Add at the top with other game variables
+let currentAnimatedBlock = null;
+let animationTimer = 0;
+
+// Constantes de animación
+const MIN_ANIMATION_DURATION = 300;
+const MAX_ANIMATION_DURATION = 800; // Base duration, will be adjusted by audio
+const BLOCK_CHANGE_INTERVAL = 1000; // Tiempo entre cambios de bloques animados
+const MAX_ANIMATED_BLOCKS_PERCENTAGE = 0.2; // 20% del total de bloques activos
+
+// Add at the top with other game variables
+let animatedBlocks = []; // Array para mantener múltiples bloques animados
+const FREQUENCY_BANDS = 8; // Número de bandas de frecuencia a analizar
+const PEAK_THRESHOLD = 0.2; // Reducido el umbral para detectar más picos
+const PEAK_COOLDOWN = 50; // Reducido el tiempo entre picos
+
+// Constantes para detección de percusión
+const DRUM_FREQ_START = 0.1; // 10% del espectro (frecuencias bajas)
+const DRUM_FREQ_END = 0.3;   // 30% del espectro (frecuencias medias-bajas)
+const DRUM_THRESHOLD = 0.4;  // Umbral para detectar golpes de percusión
+const DRUM_DECAY = 0.95;     // Factor de decaimiento para suavizar la detección
+
+// Variables para detección de percusión
+let lastDrumIntensity = 0;
+let drumHistory = new Array(5).fill(0); // Historial de los últimos 5 frames
+
+// Variables para detección de picos
+let lastPeakTime = 0;
+let previousFrequencies = new Array(FREQUENCY_BANDS).fill(0);
+let peakHistory = new Array(FREQUENCY_BANDS).fill(0);
+let averageIntensity = 0;
+let debugCounter = 0; // Para no saturar la consola
+
+function detectPeaks(frequencyData) {
+    const now = Date.now();
+    const peaks = [];
+    
+    // Calcular la intensidad promedio de todas las bandas
+    const totalIntensity = frequencyData.reduce((sum, val) => sum + val, 0);
+    averageIntensity = totalIntensity / FREQUENCY_BANDS;
+    
+    // Solo detectar picos si ha pasado suficiente tiempo desde el último
+    if (now - lastPeakTime < PEAK_COOLDOWN) {
+        return peaks;
+    }
+    
+    // Encontrar las bandas con mayor intensidad
+    let maxIntensities = [];
+    for (let i = 0; i < FREQUENCY_BANDS; i++) {
+        maxIntensities.push({
+            band: i,
+            intensity: frequencyData[i]
+        });
+    }
+    
+    // Ordenar por intensidad
+    maxIntensities.sort((a, b) => b.intensity - a.intensity);
+    
+    // Log cada 15 frames para ver más información
+    if (debugCounter++ % 15 === 0) {
+        console.debug(`Audio Analysis at ${backgroundMusic.currentTime.toFixed(2)}s:`, {
+            topBands: maxIntensities.slice(0, 3).map(b => `Band ${b.band}: ${b.intensity.toFixed(2)}`),
+            average: averageIntensity.toFixed(2),
+            isPlaying: !backgroundMusic.paused,
+            volume: backgroundMusic.volume
+        });
+    }
+    
+    // Detectar picos en las bandas más intensas
+    for (let i = 0; i < 3; i++) {
+        const band = maxIntensities[i];
+        if (band.intensity > averageIntensity * 1.2 && band.intensity > PEAK_THRESHOLD) {
+            peaks.push(band.band);
+            console.debug(`Peak detected at ${backgroundMusic.currentTime.toFixed(2)}s! Band: ${band.band}, Intensity: ${band.intensity.toFixed(2)}`);
+        }
+    }
+    
+    if (peaks.length > 0) {
+        lastPeakTime = now;
+    }
+    
+    return peaks;
+}
+
 function drawBricks() {
     // First draw a slightly lighter background for the game area
-    ctx.save();
-    ctx.fillStyle = '#1a1a25';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(gameBorder.left, gameBorder.top, gameBorder.right - gameBorder.left, gameBorder.bottom - gameBorder.top);
     
-    // Draw the top bar (HUD)
-    ctx.fillStyle = '#14141c';
-    ctx.fillRect(0, 0, canvas.width, gameBorder.top);
+    // Update animation timer
+    const now = Date.now();
     
-    // Draw the game area borders
-    ctx.fillStyle = '#0095DD';
+    // Clear blocks that have finished their animation
+    animatedBlocks = animatedBlocks.filter(block => now - block.timer < block.duration);
     
-    // Función auxiliar para dibujar bordes redondeados
-    function drawRoundedBorder(x, y, width, height, radius) {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
-        ctx.fill();
+    // Count active blocks
+    let activeBlocksCount = 0;
+    for (let c = 0; c < brickColumnCount; c++) {
+        for (let r = 0; r < brickRowCount; r++) {
+            if (bricks[c][r].status === 1 || bricks[c][r].indestructible) {
+                activeBlocksCount++;
+            }
+        }
     }
     
-    // Left border
-    drawRoundedBorder(0, gameBorder.top, borderThickness, canvas.height - gameBorder.top, 6);
+    // Calculate maximum animated blocks (20% of total)
+    const maxAnimatedBlocks = Math.max(1, Math.floor(activeBlocksCount * MAX_ANIMATED_BLOCKS_PERCENTAGE));
     
-    // Top border
-    drawRoundedBorder(0, gameBorder.top, gameBorder.right + borderThickness, borderThickness, 6);
+    // Get audio data if available
+    let audioIntensity = 0.5; // Default value
+    let maxAudioIntensity = 0.5; // For adjusting maximum duration
+    let peakIntensity = 0.5; // For glow effect
+    let drumIntensity = 0.5; // For percussion
     
-    // Right border
-    drawRoundedBorder(gameBorder.right, gameBorder.top, borderThickness, canvas.height - gameBorder.top, 6);
-    
-    // Draw side panel
-    ctx.fillStyle = sidePanelColor;
-    ctx.fillRect(gameBorder.right + borderThickness, gameBorder.top, sidePanelWidth - borderThickness, canvas.height - gameBorder.top);
-    
-    // Draw side panel border
-    ctx.strokeStyle = sidePanelBorderColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(gameBorder.right + borderThickness, gameBorder.top, sidePanelWidth - borderThickness, canvas.height - gameBorder.top);
-    
-    // Bottom border (only when invincible power-up is active)
-    if (activePowerUps.invincible) {
-        ctx.globalAlpha = powerUpBarAlpha.invincible;
-        ctx.fillStyle = '#4caf50';
-        drawRoundedBorder(0, canvas.height - borderThickness, gameBorder.right + borderThickness, borderThickness, 6);
-        ctx.globalAlpha = 1.0;
+    if (analyser && dataArray && !backgroundMusic.paused) {
+        try {
+            analyser.getByteFrequencyData(dataArray);
+            
+            // Calculate average audio intensity
+            const sum = dataArray.reduce((a, b) => a + b, 0);
+            audioIntensity = Math.min(1, Math.max(0.3, sum / (dataArray.length * 128)));
+            
+            // Calculate maximum intensity for duration adjustment
+            const maxValue = Math.max(...dataArray);
+            maxAudioIntensity = Math.min(1, Math.max(0.3, maxValue / 255));
+            
+            // Detect percussion in mid-low frequencies
+            const drumStart = Math.floor(dataArray.length * DRUM_FREQ_START);
+            const drumEnd = Math.floor(dataArray.length * DRUM_FREQ_END);
+            const drumFreqs = dataArray.slice(drumStart, drumEnd);
+            
+            // Calculate percussion energy
+            const drumEnergy = drumFreqs.reduce((a, b) => a + b, 0) / (drumEnd - drumStart);
+            const normalizedDrumEnergy = drumEnergy / 128;
+            
+            // Update percussion history
+            drumHistory.push(normalizedDrumEnergy);
+            drumHistory.shift();
+            
+            // Calculate difference with previous frame
+            const drumDiff = normalizedDrumEnergy - lastDrumIntensity;
+            
+            // Detect percussion peaks
+            if (drumDiff > DRUM_THRESHOLD && normalizedDrumEnergy > 0.3) {
+                drumIntensity = Math.min(1, drumDiff * 2);
+            } else {
+                drumIntensity = Math.max(0.3, drumIntensity * DRUM_DECAY);
+            }
+            
+            lastDrumIntensity = normalizedDrumEnergy;
+            
+            // Calculate peak intensity for glow effect
+            const highFreqSum = dataArray.slice(-dataArray.length/4).reduce((a, b) => a + b, 0);
+            peakIntensity = Math.min(1, Math.max(0.3, highFreqSum / (dataArray.length/4 * 128)));
+            
+            // Combine percussion intensity with general intensity
+            audioIntensity = Math.max(audioIntensity, drumIntensity);
+            
+        } catch (error) {
+            console.debug("Error getting audio data:", error);
+        }
     }
     
-    ctx.restore();
+    // Adjust maximum duration based on audio intensity
+    const currentMaxDuration = MIN_ANIMATION_DURATION + (MAX_ANIMATION_DURATION - MIN_ANIMATION_DURATION) * maxAudioIntensity;
     
-    // Brick shadows (drawn first)
+    // Select new blocks to animate if needed
+    if (animatedBlocks.length < maxAnimatedBlocks && now - animationTimer > BLOCK_CHANGE_INTERVAL) {
+        // Find all active blocks that are not being animated
+        const activeBlocks = [];
+        for (let c = 0; c < brickColumnCount; c++) {
+            for (let r = 0; r < brickRowCount; r++) {
+                if (bricks[c][r].status === 1 || bricks[c][r].indestructible) {
+                    // Verify block is not already being animated
+                    if (!animatedBlocks.some(block => block.c === c && block.r === r)) {
+                        activeBlocks.push({c, r});
+                    }
+                }
+            }
+        }
+        
+        // Select random blocks until reaching maximum
+        while (animatedBlocks.length < maxAnimatedBlocks && activeBlocks.length > 0) {
+            const randomIndex = Math.floor(Math.random() * activeBlocks.length);
+            const randomBlock = activeBlocks[randomIndex];
+            
+            // Calculate animation duration based on audio and percussion intensity
+            const duration = MIN_ANIMATION_DURATION + (currentMaxDuration - MIN_ANIMATION_DURATION) * audioIntensity;
+            
+            animatedBlocks.push({
+                c: randomBlock.c,
+                r: randomBlock.r,
+                timer: now,
+                duration: duration,
+                intensity: Math.max(audioIntensity, drumIntensity) // Use highest intensity
+            });
+            
+            // Remove selected block to avoid repetition
+            activeBlocks.splice(randomIndex, 1);
+        }
+        
+        animationTimer = now;
+    }
+    
     for (let c = 0; c < brickColumnCount; c++) {
         for (let r = 0; r < brickRowCount; r++) {
             const b = bricks[c][r];
@@ -863,78 +1085,60 @@ function drawBricks() {
                 b.x = brickX;
                 b.y = brickY;
                 
-                // Draw shadow
-                ctx.save();
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                ctx.beginPath();
-                ctx.rect(brickX + 3, brickY + 3, brickWidth, brickHeight);
-                ctx.fill();
-                ctx.restore();
-            }
-        }
-    }
-    
-    // Bricks with gradient
-    for (let c = 0; c < brickColumnCount; c++) {
-        for (let r = 0; r < brickRowCount; r++) {
-            const b = bricks[c][r];
-            if (b.status === 1 || b.indestructible) {
-                const brickX = b.x;
-                const brickY = b.y;
-                
-                // Main color according to type
-                let mainColor, gradientColor;
+                // Determine block color based on type
+                let mainColor;
                 if (b.indestructible) {
-                    mainColor = '#00bcd4'; // light blue
-                    gradientColor = '#80deea'; // lighter blue
+                    mainColor = '#00ffff'; // Cyan for indestructible
                 } else if (b.hits === 2) {
-                    mainColor = '#888'; // gray
-                    gradientColor = '#aaa'; // light gray
+                    mainColor = '#ff0000'; // Red for double-hit blocks
                 } else {
                     // Colors according to the type of block
                     switch(b.color) {
-                        case 'W': // White
-                            mainColor = '#f5f5f5';
-                            gradientColor = '#ffffff';
-                            break;
-                        case 'Y': // Yellow
-                            mainColor = '#ffd600';
-                            gradientColor = '#fff64f';
-                            break;
-                        case 'R': // Red
-                            mainColor = '#f44336';
-                            gradientColor = '#ff7961';
-                            break;
-                        case 'G': // Green
-                            mainColor = '#4caf50';
-                            gradientColor = '#80e27e';
-                            break;
-                        case 'O': // Orange
-                            mainColor = '#ff9800';
-                            gradientColor = '#ffcc80';
-                            break;
-                        case 'P': // Purple
-                            mainColor = '#9c27b0';
-                            gradientColor = '#d05ce3';
-                            break;
-                        case '2': // Gray
-                            mainColor = '#888';
-                            gradientColor = '#aaa';
-                            break;
-                        case '#': // Blue
-                            mainColor = '#00bcd4';
-                            gradientColor = '#80deea';
-                            break;
-                        default: // White (default)
-                            mainColor = '#f5f5f5';
-                            gradientColor = '#ffffff';
+                        case 'W': mainColor = '#f5f5f5'; break; // White
+                        case 'Y': mainColor = '#ffd600'; break; // Yellow
+                        case 'R': mainColor = '#f44336'; break; // Red
+                        case 'G': mainColor = '#4caf50'; break; // Green
+                        case 'O': mainColor = '#ff9800'; break; // Orange
+                        case 'P': mainColor = '#9c27b0'; break; // Purple
+                        case '2': mainColor = '#888'; break; // Gray
+                        case '#': mainColor = '#00bcd4'; break; // Blue
+                        default: mainColor = '#f5f5f5'; // White (default)
                     }
                 }
                 
-                // Create linear gradient
+                // Check if this block is being animated
+                const animatedBlock = animatedBlocks.find(block => block.c === c && block.r === r);
+                if (animatedBlock) {
+                    // Calculate animation progress (0 to 1)
+                    const progress = (now - animatedBlock.timer) / animatedBlock.duration;
+                    if (progress < 1) {
+                        // Usar una curva más dramática para la interpolación
+                        const t = Math.sin(progress * Math.PI);
+                        
+                        // Interpolar entre el color original y blanco puro
+                        const r1 = parseInt(mainColor.slice(1,3), 16);
+                        const g1 = parseInt(mainColor.slice(3,5), 16);
+                        const b1 = parseInt(mainColor.slice(5,7), 16);
+                        
+                        // Hacer la transición más dramática y ajustar por intensidad
+                        const intensity = animatedBlock.intensity;
+                        const r = Math.round(r1 + (255 - r1) * t * t * intensity);
+                        const g = Math.round(g1 + (255 - g1) * t * t * intensity);
+                        const b = Math.round(b1 + (255 - b1) * t * t * intensity);
+                        
+                        mainColor = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+                        
+                        // Efecto de brillo más intenso, ajustado por la intensidad de los picos
+                        ctx.shadowColor = '#ffffff';
+                        // El resplandor varía entre 10 y 40 según la intensidad de los picos
+                        ctx.shadowBlur = 10 + (30 * peakIntensity * t);
+                    }
+                }
+                
+                // Create gradient for the block with more contrast
                 const gradient = ctx.createLinearGradient(brickX, brickY, brickX, brickY + brickHeight);
-                gradient.addColorStop(0, gradientColor);
-                gradient.addColorStop(1, mainColor);
+                gradient.addColorStop(0, shadeColor(mainColor, 40));
+                gradient.addColorStop(1, shadeColor(mainColor, -40));
                 
                 // Draw block with gradient
                 ctx.fillStyle = gradient;
@@ -942,10 +1146,13 @@ function drawBricks() {
                 ctx.rect(brickX, brickY, brickWidth, brickHeight);
                 ctx.fill();
                 
-                // Simple border
-                ctx.strokeStyle = shadeColor(mainColor, -30);
-                ctx.lineWidth = 1.5;
+                // Draw border normal
+                ctx.strokeStyle = shadeColor(mainColor, -50);
+                ctx.lineWidth = 2;
                 ctx.strokeRect(brickX, brickY, brickWidth, brickHeight);
+                
+                // Reset shadow
+                ctx.shadowBlur = 0;
             }
         }
     }
@@ -1646,6 +1853,39 @@ function drawMenu() {
 
 let lastFrameTime = performance.now();
 
+function drawGameBorders() {
+    ctx.save();
+    
+    // Draw game area border
+    ctx.strokeStyle = '#2a2a3e';
+    ctx.lineWidth = borderThickness;
+    ctx.strokeRect(
+        gameBorder.left - borderThickness/2,
+        gameBorder.top - borderThickness/2,
+        gameBorder.right - gameBorder.left + borderThickness,
+        gameBorder.bottom - gameBorder.top + borderThickness
+    );
+    
+    // Draw barrier if active
+    if (activePowerUps.invincible) {
+        const alpha = powerUpTimers.invincible <= 3.0 ? 
+            0.2 + 0.8 * Math.abs(Math.sin(powerUpTimers.invincible * Math.PI * 2)) : 1.0;
+        
+        ctx.strokeStyle = `rgba(76, 175, 80, ${alpha})`; // Green color with alpha
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 5]); // Dashed line
+        ctx.strokeRect(
+            gameBorder.left,
+            canvas.height - borderThickness - 2,
+            gameBorder.right - gameBorder.left,
+            0
+        );
+        ctx.setLineDash([]); // Reset line style
+    }
+    
+    ctx.restore();
+}
+
 function draw() {
     // Check if we're in menu mode
     if (menuActive) {
@@ -1664,6 +1904,7 @@ function draw() {
     
     // Draw game state
     drawBricks();
+    drawGameBorders(); // Add this line to draw borders
     for (let ball of balls) {
         drawBall(ball);
     }
@@ -1958,17 +2199,20 @@ function startGame() {
     setupGameEvents();
     resetGameState();
     
-    // 2. LOAD CURRENT LEVEL
+    // 2. Ensure we start from level 1
+    currentLevel = 0;
+    
+    // 3. LOAD CURRENT LEVEL
     loadLevel(currentLevel);
     
-    // 3. REMOVE MENU EVENT LISTENER
+    // 4. REMOVE MENU EVENT LISTENER
     document.removeEventListener('keydown', menuKeyDownHandler);
     
-    // 4. ADD GAME EVENT LISTENERS
+    // 5. ADD GAME EVENT LISTENERS
     document.addEventListener('keydown', keyDownHandler);
     document.addEventListener('keyup', keyUpHandler);
     
-    // 5. DISABLE MENU AND START GAME LOOP
+    // 6. DISABLE MENU AND START GAME LOOP
     menuActive = false;
     lastFrameTime = performance.now();
     if (gameLoopId) {
@@ -1990,16 +2234,16 @@ function startGame() {
 function returnToMenu() {
     console.debug("Starting returnToMenu(). Initial state: menuActive=", menuActive, "currentLevel=", currentLevel);
     
-    // 1. DETENER COMPLETAMENTE EL JUEGO Y TODOS SUS TIMERS
+    // 1. COMPLETELY STOP THE GAME AND ALL TIMERS
     
-    // Cancelar el ciclo de dibujo del juego
+    // Cancel game drawing cycle
     if (gameLoopId) {
         console.debug("Canceling gameLoopId:", gameLoopId);
         cancelAnimationFrame(gameLoopId);
         gameLoopId = null;
     }
     
-    // Cancelar todos los timers y timeouts
+    // Cancel all timers and timeouts
     if (transitionTimeout) {
         clearTimeout(transitionTimeout);
         transitionTimeout = null;
@@ -2009,12 +2253,12 @@ function returnToMenu() {
         launchTimeout = null;
     }
     
-    // Limpiar eventos para evitar duplicados
+    // Clear events to avoid duplicates
     document.removeEventListener('keydown', playOnKey);
     
-    // 2. REINICIAR TODAS LAS VARIABLES DE ESTADO
+    // 2. RESET ALL STATE VARIABLES
     
-    menuActive = true; // CRUCIAL: activa el modo menú
+    menuActive = true; // CRUCIAL: activate menu mode
     showControls = false;
     selectedMenu = 0;
     paused = false;
@@ -2023,38 +2267,39 @@ function returnToMenu() {
     waitingToLaunch = false;
     isPaddleDestroyed = false;
     
-    // Resetear puntuación y vidas pero mantener el nivel
+    // Reset score, lives and level
     lives = 3;
     score = 0;
+    currentLevel = 0; // Ensure we return to level 1
     
-    // Limpiar efectos visuales
+    // Clear visual effects
     brickExplosions = [];
     fadeOutBlocks = [];
     powerUps = [];
     
-    // Resetear velocidades y efectos
+    // Reset speeds and effects
     resetGameSpeeds();
     
-    // 3. RESTAURAR LA INTERFAZ DE MENÚ
+    // 3. RESTORE MENU INTERFACE
     
-    // Reiniciar estado del paddle y la bola
+    // Reset paddle and ball state
     paddle.width = paddleOriginalWidth;
     paddle.height = paddleOriginalHeight;
     paddle.x = (canvas.width - paddle.width) / 2;
     resetBalls();
     
-    // Restaurar el handler del menú (crucial)
+    // Restore menu handler (crucial)
     document.addEventListener('keydown', menuKeyDownHandler);
     
-    // 4. INICIAR EL CICLO DE MENÚ
+    // 4. START MENU CYCLE
     
-    // Hacer un limpiado completo del canvas
+    // Complete canvas cleanup
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Dibujar el menú inmediatamente para evitar pantalla en blanco
+    // Draw menu immediately to avoid blank screen
     drawMenu();
     
-    // Iniciar la animación del menú con requestAnimationFrame
+    // Start menu animation with requestAnimationFrame
     if (menuLoopId) {
         cancelAnimationFrame(menuLoopId);
         menuLoopId = null;
