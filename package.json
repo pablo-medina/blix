@@ -1,0 +1,38 @@
+{
+  "name": "blix-game",
+  "version": "1.0.0",
+  "description": "Un juego estilo Brix hecho con Electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder build --win --publish never",
+    "build:win": "electron-builder build --win --publish never",
+    "build:mac": "electron-builder build --mac --publish never",
+    "build:linux": "electron-builder build --linux --publish never"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^28.1.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.blix.game",
+    "productName": "Blix Game",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
