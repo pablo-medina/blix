@@ -1,10 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
-    // Basic canvas configuration
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 1280;
-    canvas.height = 720;
-
+    // Game configuration
     const DEFAULT_PADDLE_SPEED = 16;
     const DEFAULT_BALL_SPEED = 8.25;
     const POWERUP_FALL_SPEED = 3.75;
@@ -13,13 +8,33 @@ document.addEventListener('DOMContentLoaded', function () {
     const POWERUP_WIDTH = 56;
     const POWERUP_HEIGHT = 24;
     const DEFAULT_BALL_RADIUS = 8;
+    const DEFAULT_PADDLE_HEIGHT = 32;
+    const DEFAULT_PADDLE_WIDTH = 160;
+    const BRICK_ROW_COUNT = 20;
+    const BRICK_COLUMN_COUNT = 15;
+    const BRICK_WIDTH = 64;
+    const BRICK_HEIGHT = 24;
+    const BRICK_PADDING = 4;
+    const BRICK_OFFSET_TOP = 12;
+    const BRICK_OFFSET_LEFT = 8;
+    const BORDER_THICKNESS = 24;
+    const POWERUP_DURATION = 10; // seconds (adjusted)
+    const INVINCIBLE_DURATION = 15; // seconds for invincible power-up
+    const DOUBLE_SIZE_DURATION = 15; // seconds for double size power-up
+    const PANEL_PADDING = 16;
+
+    // Basic canvas configuration
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 1280;
+    canvas.height = 720;
 
     // Adjust canvas size when resizing window 
     function adjustCanvas() {
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
 
-        // Maintain 4:3 aspect ratio
+        // Maintain aspect ratio
         let newWidth, newHeight;
         if (windowWidth / windowHeight > SCREEN_ASPECT_RATIO) {
             // Window is wider than tall, adjust by height
@@ -51,26 +66,14 @@ document.addEventListener('DOMContentLoaded', function () {
     window.addEventListener('resize', adjustCanvas);
     adjustCanvas();
 
-    // Game configuration
-    const paddleHeight = 32;
-    const paddleWidth = 160;
-    const brickRowCount = 6;
-    const brickColumnCount = 13;
-    const brickWidth = 80;
-    const brickHeight = 36;
-    const brickPadding = 4;
-    const brickOffsetTop = 4;
-    const brickOffsetLeft = 4;
-
     // Side panel
-    const sidePanelWidth = 170; // Adjusted to maintain symmetry
+    const sidePanelWidth = 200; // Adjusted to maintain symmetry
 
-    // Configuration of the game border
-    const borderThickness = 8;
+    // Configuration of the game border    
     const gameBorder = {
         top: 0,
-        left: borderThickness,
-        right: canvas.width - sidePanelWidth - borderThickness,
+        left: BORDER_THICKNESS,
+        right: canvas.width - sidePanelWidth - BORDER_THICKNESS,
         bottom: canvas.height
     };
 
@@ -83,12 +86,26 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- NIVELES ---
     const levels = [
         [
-            'WWWWWWWWWWWWWWW', // White
-            'YYYYYYYYYYYYYYY', // Yellow
-            'RRRRRRRRRRRRRRR', // Red
-            'GGGGGGGGGGGGGGG', // Green
-            'OOOOOOOOOOOOOOO', // Orange
-            'PPPPPPPPPPPPPPP'  // Purple
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '22222222222222222', // Gray
+            'WWWWWWWWWWWWWWWWW', // White
+            'YYYYYYYYYYYYYYYYY', // Yellow
+            'RRRRRRRRRRRRRRRRR', // Red
+            'GGGGGGGGGGGGGGGGG', // Green
+            'OOOOOOOOOOOOOOOOO', // Orange
+            'PPPPPPPPPPPPPPPPP', // Purple
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 '
         ],
         [
             '###############', // Cyan (indestructible)
@@ -127,11 +144,11 @@ document.addEventListener('DOMContentLoaded', function () {
     let balls = [createBall()]; // Change from const to let
 
     const paddle = {
-        x: (canvas.width - paddleWidth) / 2,
-        y: canvas.height - paddleHeight - 20,
+        x: (canvas.width - DEFAULT_PADDLE_WIDTH) / 2,
+        y: canvas.height - DEFAULT_PADDLE_HEIGHT - 20,
         speed: 8,
-        width: paddleWidth,
-        height: paddleHeight
+        width: DEFAULT_PADDLE_WIDTH,
+        height: DEFAULT_PADDLE_HEIGHT
     };
 
     // Control variables
@@ -154,8 +171,8 @@ document.addEventListener('DOMContentLoaded', function () {
     let isPaddleDestroyed = false;
 
     // Variables for power-up effects
-    let paddleOriginalWidth = paddleWidth;
-    let paddleOriginalHeight = paddleHeight;
+    let paddleOriginalWidth = DEFAULT_PADDLE_WIDTH;
+    let paddleOriginalHeight = DEFAULT_PADDLE_HEIGHT;
 
     // Active power-ups
     let activePowerUps = {
@@ -188,10 +205,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- PAUSE ---
     let paused = false;
 
-    // --- POWER-UPS DURATION ---
-    const POWERUP_DURATION = 10; // seconds (adjusted)
-    const INVINCIBLE_DURATION = 15; // seconds for invincible power-up
-    const DOUBLE_SIZE_DURATION = 15; // seconds for double size power-up
+    // --- POWER-UPS ---    
     let powerUpTimers = {
         sizeStack: 0,
         speedStack: 0,
@@ -905,8 +919,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Count active blocks
         let activeBlocksCount = 0;
-        for (let c = 0; c < brickColumnCount; c++) {
-            for (let r = 0; r < brickRowCount; r++) {
+        for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
+            for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                 if (bricks[c][r].status === 1 || bricks[c][r].indestructible) {
                     activeBlocksCount++;
                 }
@@ -978,8 +992,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (animatedBlocks.length < maxAnimatedBlocks && now - animationTimer > BLOCK_CHANGE_INTERVAL) {
             // Find all active blocks that are not being animated
             const activeBlocks = [];
-            for (let c = 0; c < brickColumnCount; c++) {
-                for (let r = 0; r < brickRowCount; r++) {
+            for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
+                for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                     if (bricks[c][r].status === 1 || bricks[c][r].indestructible) {
                         // Verify block is not already being animated
                         if (!animatedBlocks.some(block => block.c === c && block.r === r)) {
@@ -1012,12 +1026,12 @@ document.addEventListener('DOMContentLoaded', function () {
             animationTimer = now;
         }
 
-        for (let c = 0; c < brickColumnCount; c++) {
-            for (let r = 0; r < brickRowCount; r++) {
+        for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
+            for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                 const b = bricks[c][r];
                 if (b.status === 1 || b.indestructible) {
-                    const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
-                    const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
+                    const brickX = BORDER_THICKNESS + BRICK_OFFSET_LEFT + c * (BRICK_WIDTH + BRICK_PADDING);
+                    const brickY = BORDER_THICKNESS + BRICK_OFFSET_TOP + r * (BRICK_HEIGHT + BRICK_PADDING);
                     b.x = brickX;
                     b.y = brickY;
 
@@ -1072,20 +1086,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     // Create gradient for the block with more contrast
-                    const gradient = ctx.createLinearGradient(brickX, brickY, brickX, brickY + brickHeight);
+                    const gradient = ctx.createLinearGradient(brickX, brickY, brickX, brickY + BRICK_HEIGHT);
                     gradient.addColorStop(0, shadeColor(mainColor, 40));
                     gradient.addColorStop(1, shadeColor(mainColor, -40));
 
                     // Draw block with gradient
                     ctx.fillStyle = gradient;
                     ctx.beginPath();
-                    ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                    ctx.rect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
                     ctx.fill();
 
                     // Draw border normal
                     ctx.strokeStyle = shadeColor(mainColor, -50);
                     ctx.lineWidth = 2;
-                    ctx.strokeRect(brickX, brickY, brickWidth, brickHeight);
+                    ctx.strokeRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
 
                     // Reset shadow
                     ctx.shadowBlur = 0;
@@ -1112,12 +1126,12 @@ document.addEventListener('DOMContentLoaded', function () {
         fadeOutBlocks.push({
             x: brick.x,
             y: brick.y,
-            width: brickWidth,
-            height: brickHeight,
+            width: BRICK_WIDTH,
+            height: BRICK_HEIGHT,
             color: color,
             time: 1.0, // Initial life time (1.0 = 100%)
-            originalWidth: brickWidth,
-            originalHeight: brickHeight
+            originalWidth: BRICK_WIDTH,
+            originalHeight: BRICK_HEIGHT
         });
     }
 
@@ -1181,22 +1195,22 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.font = 'bold 16px Arial';
         ctx.fillStyle = '#0095DD';
         ctx.textAlign = 'left';
-        ctx.fillText(`Score: ${score}`, gameBorder.right + 15, gameBorder.top + 30);
+        ctx.fillText(`Score: ${score}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 16);
     }
 
     function drawLives() {
         ctx.font = 'bold 16px Arial';
         ctx.fillStyle = '#0095DD';
         ctx.textAlign = 'left';
-        ctx.fillText(`Lives: ${lives}`, gameBorder.right + 15, gameBorder.top + 55);
+        ctx.fillText(`Lives: ${lives}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 55);
     }
 
     function collisionDetection() {
-        for (let c = 0; c < brickColumnCount; c++) {
-            for (let r = 0; r < brickRowCount; r++) {
+        for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
+            for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                 const b = bricks[c][r];
                 for (let ball of balls) {
-                    if ((b.status === 1 || b.indestructible) && ball.x > b.x && ball.x < b.x + brickWidth && ball.y > b.y && ball.y < b.y + brickHeight) {
+                    if ((b.status === 1 || b.indestructible) && ball.x > b.x && ball.x < b.x + BRICK_WIDTH && ball.y > b.y && ball.y < b.y + BRICK_HEIGHT) {
                         // Si la bola tiene el efecto de fuego
                         if (activePowerUps.fireBall) {
                             // Destruir cualquier tipo de bloque
@@ -1206,12 +1220,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             audioBrick.currentTime = 0;
                             audioBrick.play();
                             createBrickExplosion(b);
-                            spawnPowerUp(b.x + brickWidth / 2 - 14, b.y + brickHeight / 2 - 14);
+                            spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                         } else if (!b.indestructible) {
                             // --- IMPROVED REALISTIC COLLISION PHYSICS ---
                             // Calculate the impact point relative to the center of the block
-                            const blockCenterX = b.x + brickWidth / 2;
-                            const blockCenterY = b.y + brickHeight / 2;
+                            const blockCenterX = b.x + BRICK_WIDTH / 2;
+                            const blockCenterY = b.y + BRICK_HEIGHT / 2;
                             const impactX = ball.x - blockCenterX;
                             const impactY = ball.y - blockCenterY;
 
@@ -1224,9 +1238,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
                             // Calculate the distances to each edge
                             const distToLeft = Math.abs(prevX - b.x);
-                            const distToRight = Math.abs(prevX - (b.x + brickWidth));
+                            const distToRight = Math.abs(prevX - (b.x + BRICK_WIDTH));
                             const distToTop = Math.abs(prevY - b.y);
-                            const distToBottom = Math.abs(prevY - (b.y + brickHeight));
+                            const distToBottom = Math.abs(prevY - (b.y + BRICK_HEIGHT));
 
                             // Find the nearest edge
                             const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
@@ -1242,13 +1256,13 @@ document.addEventListener('DOMContentLoaded', function () {
                                 case 'right':
                                     ball.dx = -ball.dx;
                                     // Adjust position to avoid multiple collisions
-                                    ball.x = hitSide === 'left' ? b.x - ball.radius : b.x + brickWidth + ball.radius;
+                                    ball.x = hitSide === 'left' ? b.x - ball.radius : b.x + BRICK_WIDTH + ball.radius;
                                     break;
                                 case 'top':
                                 case 'bottom':
                                     ball.dy = -ball.dy;
                                     // Adjust position to avoid multiple collisions
-                                    ball.y = hitSide === 'top' ? b.y - ball.radius : b.y + brickHeight + ball.radius;
+                                    ball.y = hitSide === 'top' ? b.y - ball.radius : b.y + BRICK_HEIGHT + ball.radius;
                                     break;
                             }
 
@@ -1279,7 +1293,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 // Create fading effect
                                 createBrickExplosion(b);
                                 // Power-up: possibility of dropping one
-                                spawnPowerUp(b.x + brickWidth / 2 - 14, b.y + brickHeight / 2 - 14);
+                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                             }
                         }
 
@@ -1377,7 +1391,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Visual indicators of power-up duration with fade in/out
         const barW = 150, barH = 10, gap = 8; // Reduced size and spacing
         // Positioning in the side panel
-        let x = gameBorder.right + 15;
+        let x = gameBorder.right + BORDER_THICKNESS + PANEL_PADDING;
         let y = gameBorder.top + 80; // Adjusted start
 
         ctx.save();
@@ -1497,14 +1511,14 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Bounce on the ceiling (now with border)
-            if (ball.y + ball.dy < gameBorder.top + borderThickness + ball.radius) {
+            if (ball.y + ball.dy < gameBorder.top + BORDER_THICKNESS + ball.radius) {
                 ball.dy = -ball.dy;
                 audioBounce.currentTime = 0;
                 audioBounce.play();
             }
 
             // Bounce on the floor when the invincible power-up is active
-            if (activePowerUps.invincible && ball.y + ball.dy > canvas.height - borderThickness - ball.radius) {
+            if (activePowerUps.invincible && ball.y + ball.dy > canvas.height - BORDER_THICKNESS - ball.radius) {
                 ball.dy = -ball.dy;
                 audioBounce.currentTime = 0;
                 audioBounce.play();
@@ -1890,19 +1904,17 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.restore();
     }
 
-    let lastFrameTime = performance.now();
-
     function drawGameBorders() {
         ctx.save();
 
         // Draw game area border
         ctx.strokeStyle = '#2a2a3e';
-        ctx.lineWidth = borderThickness;
+        ctx.lineWidth = BORDER_THICKNESS;
         ctx.strokeRect(
-            gameBorder.left - borderThickness / 2,
-            gameBorder.top - borderThickness / 2,
-            gameBorder.right - gameBorder.left + borderThickness,
-            gameBorder.bottom - gameBorder.top + borderThickness
+            gameBorder.left - BORDER_THICKNESS / 2,
+            gameBorder.top - BORDER_THICKNESS / 2,
+            gameBorder.right - gameBorder.left + BORDER_THICKNESS,
+            gameBorder.bottom - gameBorder.top + BORDER_THICKNESS
         );
 
         // Draw barrier if active
@@ -1915,7 +1927,7 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.setLineDash([5, 5]); // Dashed line
             ctx.strokeRect(
                 gameBorder.left,
-                canvas.height - borderThickness - 2,
+                canvas.height - BORDER_THICKNESS - 2,
                 gameBorder.right - gameBorder.left,
                 0
             );
@@ -2301,10 +2313,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Load new level
         bricks = [];
-        const asciiLevel = levels[levelIdx].map(row => row.padEnd(brickColumnCount, ' '));
-        for (let c = 0; c < brickColumnCount; c++) {
+        const asciiLevel = levels[levelIdx].map(row => row.padEnd(BRICK_COLUMN_COUNT, ' '));
+        for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
             bricks[c] = [];
-            for (let r = 0; r < brickRowCount; r++) {
+            for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                 const char = asciiLevel[r][c] || ' ';
                 let type = 0;
                 if (char === '1') type = 1;
