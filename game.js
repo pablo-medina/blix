@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Configuration of the game border    
     const gameBorder = {
-        top: 0,
+        top: BORDER_THICKNESS,
         left: BORDER_THICKNESS,
         right: canvas.width - sidePanelWidth - BORDER_THICKNESS,
         bottom: canvas.height
@@ -1927,7 +1927,7 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.setLineDash([5, 5]); // Dashed line
             ctx.strokeRect(
                 gameBorder.left,
-                canvas.height - BORDER_THICKNESS - 2,
+                canvas.height - BORDER_THICKNESS / 2,
                 gameBorder.right - gameBorder.left,
                 0
             );
