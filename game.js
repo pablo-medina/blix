@@ -5,6 +5,10 @@ const ctx = canvas.getContext('2d');
 canvas.width = 800;
 canvas.height = 600;
 
+const DEFAULT_PADDLE_SPEED = 16;
+const DEFAULT_BALL_SPEED = 8.25;
+const DEFAULT_POWERUP_FALL_SPEED = 3.75;
+
 // Adjust canvas size when resizing window 
 function adjustCanvas() {
     const windowWidth = window.innerWidth;
@@ -109,7 +113,7 @@ function createBall(x, y, launch = false) {
         dx: 0,
         dy: 0,
         radius: 8,
-        baseSpeed: 3.0
+        baseSpeed: DEFAULT_BALL_SPEED
     };
     
     if (launch) {
@@ -133,7 +137,7 @@ let balls = [createBall()]; // Change from const to let
 const paddle = {
     x: (canvas.width - paddleWidth) / 2,
     y: canvas.height - paddleHeight - 20,
-    speed: 4,
+    speed: 8,
     width: paddleWidth,
     height: paddleHeight
 };
@@ -495,7 +499,7 @@ function spawnPowerUp(x, y) {
                 color: p.color,
                 width: 28,
                 height: 28,
-                dy: 1 // Fixed fall speed
+                dy: DEFAULT_POWERUP_FALL_SPEED
             });
         }
     }
@@ -751,7 +755,7 @@ function applyStackedPowerUps() {
     }
     
     // IMPORTANT: Ensure the paddle speed never changes
-    paddle.speed = 4;
+    paddle.speed = DEFAULT_PADDLE_SPEED;
     
     // Music - limit to a reasonable range
     backgroundMusic.playbackRate = Math.max(0.5, Math.min(1.5, 1 + 0.12 * activePowerUps.speedStack));
@@ -1572,6 +1576,108 @@ function handleWallCollisions() {
             audioBounce.currentTime = 0;
             audioBounce.play();
         }
+
+        // Verificar colisión con el paddle y rebote - FÍSICA MEJORADA
+        // Calcular la posición siguiente de la bola
+        const nextBallX = ball.x + ball.dx;
+        const nextBallY = ball.y + ball.dy;
+
+        // Verificamos si la bola va a cruzar la línea superior del paddle
+        if (ball.y + ball.radius <= paddle.y && nextBallY + ball.radius >= paddle.y) {
+            // Verificar si está horizontalmente dentro del paddle
+            if (nextBallX + ball.radius > paddle.x && nextBallX - ball.radius < paddle.x + paddle.width) {
+                // Calcular el punto exacto de colisión en Y
+                ball.y = paddle.y - ball.radius;
+                
+                // 1. Calcular la posición relativa de impacto (0 a 1)
+                const relativeIntersectX = (ball.x - paddle.x) / paddle.width;
+                
+                // 2. Calcular la velocidad del paddle en el momento del impacto
+                const paddleSpeed = rightPressed ? paddle.speed : (leftPressed ? -paddle.speed : 0);
+                
+                // 3. Calcular el ángulo base de rebote (más pronunciado en los extremos)
+                // Usar una función no lineal para hacer más pronunciados los ángulos en los extremos
+                const normalizedPosition = relativeIntersectX * 2 - 1; // Convertir a rango -1 a 1
+                const angleFactor = Math.sign(normalizedPosition) * Math.pow(Math.abs(normalizedPosition), 1.5);
+                const maxBounceAngle = Math.PI / 3; // 60 grados máximo
+                const bounceAngle = angleFactor * maxBounceAngle;
+                
+                // 4. Calcular la velocidad actual de la bola
+                const currentSpeed = ball.baseSpeed; // Usar la velocidad base en lugar de la actual
+                
+                // 5. Aplicar efecto de "spin" basado en la velocidad del paddle
+                const spinFactor = 0.2; // Factor de influencia del spin
+                const spinEffect = paddleSpeed * spinFactor;
+                
+                // 6. Calcular la nueva velocidad (usando la velocidad base)
+                const newSpeed = currentSpeed;
+                
+                // 7. Aplicar el ángulo y la velocidad
+                ball.dx = newSpeed * Math.sin(bounceAngle) + spinEffect;
+                ball.dy = -Math.abs(newSpeed * Math.cos(bounceAngle)); // Siempre hacia arriba
+                
+                // 8. Asegurar que la velocidad no sea demasiado baja
+                const minSpeed = ball.baseSpeed * 0.8;
+                const actualSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                if (actualSpeed < minSpeed) {
+                    const speedFactor = minSpeed / actualSpeed;
+                    ball.dx *= speedFactor;
+                    ball.dy *= speedFactor;
+                }
+                
+                // 9. Limitar la velocidad máxima
+                const maxSpeed = ball.baseSpeed * 1.2; // Reducido de 2.5 a 1.2 para mantener la velocidad más constante
+                if (actualSpeed > maxSpeed) {
+                    const speedFactor = maxSpeed / actualSpeed;
+                    ball.dx *= speedFactor;
+                    ball.dy *= speedFactor;
+                }
+                
+                // Reproducir sonido de rebote
+                audioBounce.currentTime = 0;
+                audioBounce.play();
+            }
+        }
+        
+        // Check if ball is lost (went below the paddle)
+        if (ball.y + ball.radius > canvas.height) {
+            // If not invincible, remove the ball
+            if (!activePowerUps.invincible) {
+                const ballIndex = balls.indexOf(ball);
+                if (ballIndex > -1) {
+                    balls.splice(ballIndex, 1);
+                }
+                
+                // If no balls left, lose a life
+                if (balls.length === 0) {
+                    lives--;
+                    if (lives <= 0) {
+                        showGameOver = true;
+                        gameOverHandled = false;
+                    } else {
+                        // Reset paddle and ball
+                        paddle.x = (canvas.width - paddle.width) / 2;
+                        paddle.width = paddleOriginalWidth;
+                        paddle.height = paddleOriginalHeight;
+                        resetBalls();
+                        waitingToLaunch = true;
+                        if (launchTimeout) clearTimeout(launchTimeout);
+                        launchTimeout = setTimeout(() => {
+                            launchBall();
+                        }, 3000);
+                        backgroundMusic.playbackRate = 1; // Restaurar velocidad normal de la música
+                        activePowerUps = {
+                            sizeStack: 0,
+                            speedStack: 0,
+                            invincible: false,
+                            fireBall: false
+                        };
+                        speedStackTimer = 0;
+                        powerUps = [];
+                    }
+                }
+            }
+        }
         
         // Prevent ball from entering the side panel
         if (ball.x + ball.dx > gameBorder.right - ball.radius) {
@@ -1695,7 +1801,7 @@ function resetGameSpeeds() {
     bottomBorderAlpha = 1.0;
     
     // IMPORTANT: Make sure to set the original paddle speed
-    paddle.speed = 4; // Original paddle speed
+    paddle.speed = DEFAULT_PADDLE_SPEED; // Original paddle speed
     
     // Reset power-up effects
     powerUps = [];
@@ -1886,234 +1992,13 @@ function drawGameBorders() {
     ctx.restore();
 }
 
-function draw() {
-    // Check if we're in menu mode
-    if (menuActive) {
-        console.debug("WARNING: draw() called while menuActive=true. Canceling frame...");
-        return;
-    }
-    
-    // Calculate deltaTime in seconds
-    const now = performance.now();
-    let deltaTime = (now - lastFrameTime) / 1000;
-    if (deltaTime > 0.1) deltaTime = 0.1; // Limit to 0.1s per frame
-    lastFrameTime = now;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw game state
-    drawBricks();
-    drawGameBorders(); // Add this line to draw borders
-    for (let ball of balls) {
-        drawBall(ball);
-    }
-    drawPaddle();
-    drawScore();
-    drawLives();
-    drawPowerUps();
-    drawPowerUpBars();
-    
-    if (paused) {
-        // When paused, draw the pause message on top of the game state
-        drawPause();
-        gameLoopId = requestAnimationFrame(draw);
-        return;
-    }
-    
-    // Rest of the game logic (collisions, updates, etc.)
-    if (showLevelMessage) {
-        drawLevelMessage('Level Complete!');
-        gameLoopId = requestAnimationFrame(draw);
-        return;
-    }
-    if (showGameOver) {
-        drawLevelMessage('GAME OVER');
-        if (!gameOverHandled) {
-            gameOverHandled = true;
-            if (transitionTimeout) {
-                clearTimeout(transitionTimeout);
-                transitionTimeout = null;
-            }
-            if (launchTimeout) {
-                clearTimeout(launchTimeout);
-                launchTimeout = null;
-            }
-            
-            transitionTimeout = setTimeout(() => {
-                showGameOver = false;
-                if (gameLoopId) {
-                    cancelAnimationFrame(gameLoopId);
-                    gameLoopId = null;
-                }
-                menuActive = true;
-                currentLevel = 0;
-                returnToMenu();
-                gameOverHandled = false;
-            }, 3000);
-        }
-        gameLoopId = requestAnimationFrame(draw);
-        return;
-    }
-    if (waitingToLaunch) {
-        // Allow paddle movement
-        if (rightPressed && paddle.x < gameBorder.right - paddle.width) {
-            paddle.speed = 4;
-            paddle.x += paddle.speed;
-        } else if (leftPressed && paddle.x > gameBorder.left) {
-            paddle.speed = 4;
-            paddle.x -= paddle.speed;
-        }
-        // Update ball position to follow paddle
-        for (let ball of balls) {
-            ball.x = paddle.x + paddle.width / 2;
-            ball.y = paddle.y - ball.radius;
-        }
-        gameLoopId = requestAnimationFrame(draw);
-        return;
-    }
-    
-    // Rest of the game logic...
-    checkGamepad();
-    collisionDetection();
-    updatePowerUps();
-    handleWallCollisions();
-    
-    // Verificar colisión con el paddle y rebote - FÍSICA MEJORADA
-    for (let ball of balls) {
-        // Calcular la posición siguiente de la bola
-        const nextBallX = ball.x + ball.dx;
-        const nextBallY = ball.y + ball.dy;
+// Fixed time step variables
+const FIXED_TIME_STEP = 1/60; // 60 updates per second
+let accumulator = 0;
+let lastTime = 0;
 
-        // Verificamos si la bola va a cruzar la línea superior del paddle
-        if (ball.y + ball.radius <= paddle.y && nextBallY + ball.radius >= paddle.y) {
-            // Verificar si está horizontalmente dentro del paddle
-            if (nextBallX + ball.radius > paddle.x && nextBallX - ball.radius < paddle.x + paddle.width) {
-                // Calcular el punto exacto de colisión en Y
-                ball.y = paddle.y - ball.radius;
-                
-                // 1. Calcular la posición relativa de impacto (0 a 1)
-                const relativeIntersectX = (ball.x - paddle.x) / paddle.width;
-                
-                // 2. Calcular la velocidad del paddle en el momento del impacto
-                const paddleSpeed = rightPressed ? paddle.speed : (leftPressed ? -paddle.speed : 0);
-                
-                // 3. Calcular el ángulo base de rebote (más pronunciado en los extremos)
-                // Usar una función no lineal para hacer más pronunciados los ángulos en los extremos
-                const normalizedPosition = relativeIntersectX * 2 - 1; // Convertir a rango -1 a 1
-                const angleFactor = Math.sign(normalizedPosition) * Math.pow(Math.abs(normalizedPosition), 1.5);
-                const maxBounceAngle = Math.PI / 3; // 60 grados máximo
-                const bounceAngle = angleFactor * maxBounceAngle;
-                
-                // 4. Calcular la velocidad actual de la bola
-                const currentSpeed = ball.baseSpeed; // Usar la velocidad base en lugar de la actual
-                
-                // 5. Aplicar efecto de "spin" basado en la velocidad del paddle
-                const spinFactor = 0.2; // Factor de influencia del spin
-                const spinEffect = paddleSpeed * spinFactor;
-                
-                // 6. Calcular la nueva velocidad (usando la velocidad base)
-                const newSpeed = currentSpeed;
-                
-                // 7. Aplicar el ángulo y la velocidad
-                ball.dx = newSpeed * Math.sin(bounceAngle) + spinEffect;
-                ball.dy = -Math.abs(newSpeed * Math.cos(bounceAngle)); // Siempre hacia arriba
-                
-                // 8. Asegurar que la velocidad no sea demasiado baja
-                const minSpeed = ball.baseSpeed * 0.8;
-                const actualSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-                if (actualSpeed < minSpeed) {
-                    const speedFactor = minSpeed / actualSpeed;
-                    ball.dx *= speedFactor;
-                    ball.dy *= speedFactor;
-                }
-                
-                // 9. Limitar la velocidad máxima
-                const maxSpeed = ball.baseSpeed * 1.2; // Reducido de 2.5 a 1.2 para mantener la velocidad más constante
-                if (actualSpeed > maxSpeed) {
-                    const speedFactor = maxSpeed / actualSpeed;
-                    ball.dx *= speedFactor;
-                    ball.dy *= speedFactor;
-                }
-                
-                // Reproducir sonido de rebote
-                audioBounce.currentTime = 0;
-                audioBounce.play();
-            }
-        }
-
-        // Verificar si la bola ha caído
-        if (ball.y + ball.radius > canvas.height) {
-            // Si no está activo el power-up invincible
-            if (!activePowerUps.invincible) {
-                // Eliminar la pelota actual
-                const ballIndex = balls.indexOf(ball);
-                if (ballIndex > -1) {
-                    balls.splice(ballIndex, 1);
-                }
-                
-                // Si no quedan pelotas, perder una vida
-                if (balls.length === 0) {
-                    // ANIMACIÓN DE DESTRUCCIÓN DEL PADDLE
-                    if (!isPaddleDestroyed) {
-                        isPaddleDestroyed = true;
-                        paddleDestructionFrames = 0;
-                    }
-                }
-            }
-        }
-
-        // Movimiento de la bola
-        ball.x += ball.dx;
-        ball.y += ball.dy;
-    }
-
-    // Animación de destrucción del paddle
-    if (isPaddleDestroyed) {
-        paddleDestructionFrames++;
-        if (paddleDestructionFrames > 24) { // 24 frames de animación (~0.4s a 60fps)
-            isPaddleDestroyed = false;
-            paddleDestructionFrames = 0;
-            // Restar vida y reiniciar bola y paddle
-            lives--;
-            if (lives <= 0) {
-                showGameOver = true;
-                // Asegurarnos de que el temporizador de game over no esté activo
-                if (transitionTimeout) clearTimeout(transitionTimeout);
-                gameOverHandled = false; // Reset para que se maneje correctamente
-            } else {
-                paddle.x = (canvas.width - paddle.width) / 2;
-                paddle.width = paddleOriginalWidth;
-                paddle.height = paddleOriginalHeight;
-                resetBalls();
-                waitingToLaunch = true;
-                if (launchTimeout) clearTimeout(launchTimeout);
-                launchTimeout = setTimeout(() => {
-                    launchBall();
-                }, 3000);
-                backgroundMusic.playbackRate = 1; // Restaurar velocidad normal de la música
-                activePowerUps = {
-                    sizeStack: 0,
-                    speedStack: 0,
-                    invincible: false,
-                    fireBall: false
-                };
-                speedStackTimer = 0;
-                powerUps = [];
-            }
-        }
-    } else {
-        // Movimiento del paddle
-        if (rightPressed && paddle.x < gameBorder.right - paddle.width) {
-            paddle.speed = 4;
-            paddle.x += paddle.speed;
-        } else if (leftPressed && paddle.x > gameBorder.left) {
-            paddle.speed = 4;
-            paddle.x -= paddle.speed;
-        }
-    }
-
-    // --- NUEVO: temporizador de power-ups ---
+function updatePhysics(deltaTime) {
+    // Update power-ups timers
     if (activePowerUps.sizeStack !== 0) {
         powerUpTimers.sizeStack -= deltaTime;
         if (powerUpTimers.sizeStack <= 0) {
@@ -2130,13 +2015,6 @@ function draw() {
     }
     if (activePowerUps.invincible) {
         powerUpTimers.invincible -= deltaTime;
-        
-        // Blinking when 3 seconds or less remaining
-        if (powerUpTimers.invincible <= 3.0) {
-            // Blink the border with a cycle of approximately 0.5 seconds
-            powerUpBarAlpha.invincible = 0.2 + 0.8 * Math.abs(Math.sin(powerUpTimers.invincible * Math.PI * 2));
-        }
-        
         if (powerUpTimers.invincible <= 0) {
             activePowerUps.invincible = false;
             powerUpBarAlpha.invincible = 0;
@@ -2144,40 +2022,133 @@ function draw() {
     }
     if (activePowerUps.fireBall) {
         powerUpTimers.fireBall -= deltaTime;
-        
-        // Parpadeo cuando quedan 3 segundos o menos
-        if (powerUpTimers.fireBall <= 3.0) {
-            bottomBorderBlink = true;
-            // Hacer parpadear el borde con un ciclo de aproximadamente 0.5 segundos
-            bottomBorderAlpha = 0.2 + 0.8 * Math.abs(Math.sin(powerUpTimers.fireBall * Math.PI * 2));
-        }
-        
         if (powerUpTimers.fireBall <= 0) {
             activePowerUps.fireBall = false;
             bottomBorderBlink = false;
         }
     }
-
-    // En el loop principal, incrementar el ángulo de rotación de los power-ups
-    powerUpAngle += 0.05;
-
-    // In the main game loop, add the double size timer check
     if (activePowerUps.doubleSize) {
         powerUpTimers.doubleSize -= deltaTime;
-        
-        // Blinking when 3 seconds or less remaining
-        if (powerUpTimers.doubleSize <= 3.0) {
-            bottomBorderBlink = true;
-            // Blink the border with a cycle of approximately 0.5 seconds
-            bottomBorderAlpha = 0.2 + 0.8 * Math.abs(Math.sin(powerUpTimers.doubleSize * Math.PI * 2));
-        }
-        
         if (powerUpTimers.doubleSize <= 0) {
             activePowerUps.doubleSize = false;
             bottomBorderBlink = false;
         }
     }
 
+    // Update paddle position
+    if (!isPaddleDestroyed) {
+        if (rightPressed && paddle.x < gameBorder.right - paddle.width) {            
+            paddle.x += paddle.speed;
+        } else if (leftPressed && paddle.x > gameBorder.left) {
+            paddle.x -= paddle.speed;
+        }
+    }
+
+    // Update ball positions and handle collisions
+    for (let ball of balls) {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+    }
+
+    // Handle collisions
+    checkGamepad();
+    collisionDetection();
+    handleWallCollisions();
+    updatePowerUps();
+
+    // Update power-up rotation
+    powerUpAngle += 0.05;
+}
+
+function draw() {
+    // Check if we're in menu mode
+    if (menuActive) {
+        console.debug("WARNING: draw() called while menuActive=true. Canceling frame...");
+        return;
+    }
+
+    // Calculate deltaTime in seconds
+    const now = performance.now();
+    let deltaTime = (now - lastTime) / 1000;
+    if (deltaTime > 0.1) deltaTime = 0.1; // Limit to 0.1s per frame
+    lastTime = now;
+
+    // Accumulate time
+    accumulator += deltaTime;
+
+    // Update physics with fixed time step
+    while (accumulator >= FIXED_TIME_STEP) {
+        updatePhysics(FIXED_TIME_STEP);
+        accumulator -= FIXED_TIME_STEP;
+    }
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw game state
+    drawBricks();
+    drawGameBorders();
+    for (let ball of balls) {
+        drawBall(ball);
+    }
+    drawPaddle();
+    drawScore();
+    drawLives();
+    drawPowerUps();
+    drawPowerUpBars();
+
+    if (paused) {
+        drawPause();
+        gameLoopId = requestAnimationFrame(draw);
+        return;
+    }
+
+    if (showLevelMessage) {
+        drawLevelMessage('Level Complete!');
+        gameLoopId = requestAnimationFrame(draw);
+        return;
+    }
+
+    if (showGameOver) {
+        drawLevelMessage('GAME OVER');
+        if (!gameOverHandled) {
+            gameOverHandled = true;
+            if (transitionTimeout) {
+                clearTimeout(transitionTimeout);
+                transitionTimeout = null;
+            }
+            if (launchTimeout) {
+                clearTimeout(launchTimeout);
+                launchTimeout = null;
+            }
+
+            transitionTimeout = setTimeout(() => {
+                showGameOver = false;
+                if (gameLoopId) {
+                    cancelAnimationFrame(gameLoopId);
+                    gameLoopId = null;
+                }
+                menuActive = true;
+                currentLevel = 0;
+                returnToMenu();
+                gameOverHandled = false;
+            }, 3000);
+        }
+        gameLoopId = requestAnimationFrame(draw);
+        return;
+    }
+
+    if (waitingToLaunch) {        
+        // Update ball position to follow paddle
+        for (let ball of balls) {
+            ball.x = paddle.x + paddle.width / 2;
+            ball.y = paddle.y - ball.radius;
+        }
+        gameLoopId = requestAnimationFrame(draw);
+        return;
+    } 
+
+    // Request next frame
     gameLoopId = requestAnimationFrame(draw);
 }
 
@@ -2349,7 +2320,7 @@ function resetGameState() {
     backgroundMusic.playbackRate = 1.0;
     
     // Resetear paddle
-    paddle.speed = 4;
+    paddle.speed = DEFAULT_PADDLE_SPEED;
     paddle.width = paddleOriginalWidth;
     paddle.height = paddleOriginalHeight;
     paddle.x = (canvas.width - paddle.width) / 2;
@@ -2445,7 +2416,7 @@ function loadLevel(levelIdx) {
     paddle.width = paddleOriginalWidth;
     paddle.height = paddleOriginalHeight;
     paddle.x = (canvas.width - paddle.width) / 2;
-    paddle.speed = 4;
+    paddle.speed = DEFAULT_PADDLE_SPEED;
     
     // Reset music
     backgroundMusic.playbackRate = 1.0;
