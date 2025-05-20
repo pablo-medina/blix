@@ -8,6 +8,7 @@ canvas.height = 600;
 const DEFAULT_PADDLE_SPEED = 16;
 const DEFAULT_BALL_SPEED = 8.25;
 const DEFAULT_POWERUP_FALL_SPEED = 3.75;
+const DEFAULT_BALL_LAUNCH_ANGLE = 1.15;
 
 // Adjust canvas size when resizing window 
 function adjustCanvas() {
@@ -1412,7 +1413,7 @@ function launchBall() {
             ball.y = paddle.y - ball.radius;
             
             // Lanzar la bola usando el mismo ángulo que en createBall
-            const angle = 0.6;
+            const angle = DEFAULT_BALL_LAUNCH_ANGLE;
             ball.dx = ball.baseSpeed * Math.cos(angle);
             ball.dy = -ball.baseSpeed * Math.sin(angle);
             
