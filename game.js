@@ -2,13 +2,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // Basic canvas configuration
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-canvas.width = 800;
-canvas.height = 600;
+canvas.width = 1280;
+canvas.height = 720;
 
 const DEFAULT_PADDLE_SPEED = 16;
 const DEFAULT_BALL_SPEED = 8.25;
-const DEFAULT_POWERUP_FALL_SPEED = 3.75;
+const POWERUP_FALL_SPEED = 3.75;
 const DEFAULT_BALL_LAUNCH_ANGLE = 1.15;
+const SCREEN_ASPECT_RATIO = 16/9;
+const POWERUP_WIDTH = 56;
+const POWERUP_HEIGHT = 24;
 
 // Adjust canvas size when resizing window 
 function adjustCanvas() {
@@ -17,14 +20,14 @@ function adjustCanvas() {
     
     // Maintain 4:3 aspect ratio
     let newWidth, newHeight;
-    if (windowWidth / windowHeight > 4/3) {
+    if (windowWidth / windowHeight > SCREEN_ASPECT_RATIO) {
         // Window is wider than tall, adjust by height
         newHeight = windowHeight * 0.95; // Use 95% of available height
-        newWidth = newHeight * (4/3);
+        newWidth = newHeight * SCREEN_ASPECT_RATIO;
     } else {
         // Window is taller than wide, adjust by width
         newWidth = windowWidth * 0.95; // Use 95% of available width
-        newHeight = newWidth * (3/4);
+        newHeight = newWidth * (1/SCREEN_ASPECT_RATIO);
     }
     
     // Round to integers
@@ -48,25 +51,23 @@ window.addEventListener('resize', adjustCanvas);
 adjustCanvas();
 
 // Game configuration
-const paddleHeight = 16;
-const paddleWidth = 120;
+const paddleHeight = 32;
+const paddleWidth = 160;
 const brickRowCount = 6;
 const brickColumnCount = 13;
-const brickWidth = 45;
-const brickHeight = 25;
-const brickPadding = 2;
-const brickOffsetTop = 45;
-const brickOffsetLeft = 10;
+const brickWidth = 80;
+const brickHeight = 36;
+const brickPadding = 4;
+const brickOffsetTop = 4;
+const brickOffsetLeft = 4;
 
 // Side panel
 const sidePanelWidth = 170; // Adjusted to maintain symmetry
-const sidePanelColor = '#1a1a2e';
-const sidePanelBorderColor = '#2a2a3e';
 
 // Configuration of the game border
-const borderThickness = 6;
+const borderThickness = 8;
 const gameBorder = {
-    top: 35,
+    top: 0,
     left: borderThickness,
     right: canvas.width - sidePanelWidth - borderThickness,
     bottom: canvas.height
@@ -156,7 +157,6 @@ let showGameOver = false;
 let transitionTimeout = null;
 let gameOverHandled = false;
 let waitingToLaunch = false;
-let waitBallOnPaddle = false;
 let launchTimeout = null;
 
 // Paddle destruction animation
@@ -222,7 +222,6 @@ let gameLoopId = null; // To control the main loop
 let menuLoopId = null; // To control the menu loop
 
 // Visual effects
-let brickExplosions = []; // Brick explosion animations
 let fadeOutBlocks = []; // Fading blocks animation
 
 // Initialize bricks
@@ -403,13 +402,7 @@ function initAudioAnalysis() {
         
         backgroundMusic.addEventListener('pause', () => {
             console.debug("Music paused - Analyzer inactive");
-        });
-        
-        backgroundMusic.addEventListener('timeupdate', () => {
-            if (debugCounter % 30 === 0) { // Reduce log frequency
-                console.debug(`Current time: ${backgroundMusic.currentTime.toFixed(2)}s`);
-            }
-        });
+        });                
 
         audioInitialized = true;
         console.debug("Audio analysis initialized successfully with FFT size:", analyser.fftSize);
@@ -498,9 +491,9 @@ function spawnPowerUp(x, y) {
                 y,
                 type: p.type,
                 color: p.color,
-                width: 28,
-                height: 28,
-                dy: DEFAULT_POWERUP_FALL_SPEED
+                width: POWERUP_WIDTH,
+                height: POWERUP_HEIGHT,
+                dy: POWERUP_FALL_SPEED
             });
         }
     }
@@ -579,33 +572,7 @@ function drawPowerUps() {
         ctx.lineTo(l3.x, l3.y);
         ctx.closePath();
         ctx.fillStyle = shadeColor(pu.color, -20); // Darker version of color
-        ctx.fill();
-        
-        // Texture on side face (only if visible)
-        if (cosA > 0) {
-            ctx.save();
-            // Define clip for side face
-            ctx.beginPath();
-            ctx.moveTo(l0.x, l0.y);
-            ctx.lineTo(l1.x, l1.y);
-            ctx.lineTo(l2.x, l2.y);
-            ctx.lineTo(l3.x, l3.y);
-            ctx.closePath();
-            ctx.clip();
-            // Calculate center and projected size
-            const centerX = (l0.x + l1.x + l2.x + l3.x) / 4;
-            const centerY = (l0.y + l1.y + l2.y + l3.y) / 4;
-            const scaleX = Math.min(1, cosA); // Scale based on face visibility
-            // Apply text with transformation
-            ctx.translate(centerX, centerY);
-            ctx.scale(scaleX, 1);
-            ctx.font = 'bold 16px Arial';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(pu.type, 0, 0);
-            ctx.restore();
-        }
+        ctx.fill();                
         
         // Top face
         ctx.beginPath();
@@ -615,33 +582,7 @@ function drawPowerUps() {
         ctx.lineTo(s3.x, s3.y);
         ctx.closePath();
         ctx.fillStyle = shadeColor(pu.color, 20); // Lighter version of color
-        ctx.fill();
-        
-        // Texture on top face (only if visible)
-        if (cosA < 0.9) {
-            ctx.save();
-            // Define clip for top face
-            ctx.beginPath();
-            ctx.moveTo(s0.x, s0.y);
-            ctx.lineTo(s1.x, s1.y);
-            ctx.lineTo(s2.x, s2.y);
-            ctx.lineTo(s3.x, s3.y);
-            ctx.closePath();
-            ctx.clip();
-            // Calculate center and projected size
-            const centerX = (s0.x + s1.x + s2.x + s3.x) / 4;
-            const centerY = (s0.y + s1.y + s2.y + s3.y) / 4;
-            const scaleY = Math.abs(sinA); // Scale based on face visibility
-            // Apply text with transformation
-            ctx.translate(centerX, centerY);
-            ctx.scale(1, scaleY);
-            ctx.font = 'bold 14px Arial';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(pu.type, 0, 0);
-            ctx.restore();
-        }
+        ctx.fill();                
     });
 }
 
