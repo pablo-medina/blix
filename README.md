@@ -43,7 +43,7 @@ A modern breakout game built with vanilla JavaScript and HTML5 Canvas.
 
 - pingpongbat.ogg: https://opengameart.org/content/ping-pong-sounds
 - hit01.wav: https://opengameart.org/content/hit-sound-bitcrush
-- Neon Brick Dance Music: Made with SUNO AI (http://suno.com)
+- Neon Bricks Dance Music: Made with SUNO AI (http://suno.com)
 - Metal Click: https://opengameart.org/content/metal-click
 
 Enjoy playing! 
