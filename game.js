@@ -108,20 +108,92 @@ document.addEventListener('DOMContentLoaded', function () {
             '                 '
         ],
         [
-            '###############', // Cyan (indestructible)
-            '222222222222222', // Gray
-            'WWWWWWWWWWWWWWW', // White
-            'WWWWWWWWWWWWWWW', // White
-            'WWWWWWWWWWWWWWW', // White
-            'WWWWWWWWWWWWWWW'  // White
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '2 2 2 2 2 2 2 2 2', // Gray
+            'W W W W W W W W W', // White
+            'Y Y Y Y Y Y Y Y Y', // Yellow
+            'R R R R R R R R R', // Red
+            'G G G G G G G G G', // Green
+            'O O O O O O O O O', // Orange
+            'P P P P P P P P P', // Purple
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 '
         ],
         [
-            '#             #', // Cyan (indestructible)
-            '2             2', // Gray
-            'W             W', // White
-            'W    WWWWW    W', // White
-            '2             2', // Gray
-            '#             #'  // Cyan (indestructible)
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '2222  22222  2222', // Gray
+            'W  W  W   W  W  W', // White
+            'Y  Y  Y   Y  Y  Y', // Yellow
+            'R  R  R   R  R  R', // Red
+            'G  G  G   G  G  G', // Green
+            'O  O  O   O  O  O', // Orange
+            'PPPP  PPPPP  PPPP', // Purple
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 '
+        ],
+        [
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            'WWWWWWWWWWWWWWWWW', // Gray
+            '                 ', // White
+            'YYYYYYYYYYYYYYYYY', // Yellow
+            '      ####       ', // Red
+            'GGGGGGGGGGGGGGGGG', // Green
+            '                 ', // Orange
+            'PPPPPPPPPPPPPPPPP', // Purple
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 '
+        ],
+        [
+            '                 ',
+            '                 ',
+            '                 ',
+            '######     ######',
+            'WWWWWWWWWWWWWWWWW', // Gray
+            'WWWWWWWWWWWWWWWWW', // White
+            'YYYYYYYYYYYYYYYYY', // Yellow
+            'RRRRRRRRRRRRRRRRR', // Red
+            'GGGGGGGGGGGGGGGGG', // Green
+            'OOOOOOOOOOOOOOOOO', // Orange
+            'PPPPPPPPPPPPPPPPP', // Purple
+            '######     ######',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 ',
+            '                 '
         ]
     ];
 
