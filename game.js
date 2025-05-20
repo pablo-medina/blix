@@ -86,114 +86,114 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- NIVELES ---
     const levels = [
         [
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '2222222222222222', // Gray
-            'WWWWWWWWWWWWWWWW', // White
-            'YYYYYYYYYYYYYYYY', // Yellow
-            'RRRRRRRRRRRRRRRR', // Red
-            'GGGGGGGGGGGGGGGG', // Green
-            'OOOOOOOOOOOOOOOO', // Orange
-            'PPPPPPPPPPPPPPPP', // Purple
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                '
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '222222222222222', // Gray
+            'WWWWWWWWWWWWWWW', // White
+            'YYYYYYYYYYYYYYY', // Yellow
+            'RRRRRRRRRRRRRRR', // Red
+            'GGGGGGGGGGGGGGG', // Green
+            'OOOOOOOOOOOOOOO', // Orange
+            'PPPPPPPPPPPPPPP', // Purple
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
         ],
         [
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '2 2 2 2222 2 2 2', // Gray
-            'W W W WWWW W W W', // White
-            'Y Y Y YYYY Y Y Y', // Yellow
-            'R R R RRRR R R R', // Red
-            'G G G GGGG G G G', // Green
-            'O O O OOOO O O O', // Orange
-            'P P P PPPP P P P', // Purple
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                '
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '2 2 2 222 2 2 2', // Gray
+            'W W W WWW W W W', // White
+            'Y Y Y YYY Y Y Y', // Yellow
+            'R R R RRR R R R', // Red
+            'G G G GGG G G G', // Green
+            'O O O OOO O O O', // Orange
+            'P P P PPP P P P', // Purple
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
         ],
         [
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '2222  2222  2222', // Gray
-            'W  W  W  W  W  W', // White
-            'Y  Y  Y  Y  Y  Y', // Yellow
-            'R  R  R  R  R  R', // Red
-            'G  G  G  G  G  G', // Green
-            'O  O  O  O  O  O', // Orange
-            'PPPP  PPPP  PPPP', // Purple
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                '
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '2222  222  2222', // Gray
+            'W  W  WWW  W  W', // White
+            'Y  Y  YYY  Y  Y', // Yellow
+            'R  R  RRR  R  R', // Red
+            'G  G  GGG  G  G', // Green
+            'O  O  OOO  O  O', // Orange
+            'PPPP  PPP  PPPP', // Purple
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
         ],
         [
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            'WWWWWWWWWWWWWWWW', // Gray
-            '                ', // White
-            'YYYYYYYYYYYYYYYY', // Yellow
-            '      ####      ', // Red
-            'GGGGGGGGGGGGGGGG', // Green
-            '                ', // Orange
-            'PPPPPPPPPPPPPPPP', // Purple
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                '
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            'WWWWWWWWWWWWWWW', // Gray
+            '               ', // White
+            'YYYYYYYYYYYYYYY', // Yellow
+            '     #####     ', // Red
+            'GGGGGGGGGGGGGGG', // Green
+            '               ', // Orange
+            'PPPPPPPPPPPPPPP', // Purple
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
         ],
         [
-            '                ',
-            '                ',
-            '                ',
-            '######    ######',
-            'WWWWWWWWWWWWWWWW', // Gray
-            'WWWWWWWWWWWWWWWW', // White
-            'YYYYYYYYYYYYYYYY', // Yellow
-            'RRRRRRRRRRRRRRRR', // Red
-            'GGGGGGGGGGGGGGGG', // Green
-            'OOOOOOOOOOOOOOOO', // Orange
-            'PPPPPPPPPPPPPPPP', // Purple
-            '######    ######',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                ',
-            '                '
+            '               ',
+            '               ',
+            '               ',
+            '######   ######',
+            'WWWWWWWWWWWWWWW', // Gray
+            'WWWWWWWWWWWWWWW', // White
+            'YYYYYYYYYYYYYYY', // Yellow
+            'RRRRRRRRRRRRRRR', // Red
+            'GGGGGGGGGGGGGGG', // Green
+            'OOOOOOOOOOOOOOO', // Orange
+            'PPPPPPPPPPPPPPP', // Purple
+            '######   ######',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
         ]
     ];
 
