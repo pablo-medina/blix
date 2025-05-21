@@ -1111,8 +1111,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     let mainColor;
                     if (b.indestructible) {
                         mainColor = '#00ffff'; // Cyan for indestructible
-                    } else if (b.hits === 2) {
-                        mainColor = '#ff0000'; // Red for double-hit blocks
+                    } else if (b.color === '2') { // Gray block
+                        if (b.hits === 1) {
+                            // Si ya recibió un hit, hacer el bloque más claro
+                            mainColor = '#aaaaaa';
+                        } else {
+                            mainColor = '#888888';
+                        }
                     } else {
                         // Colors according to the type of block
                         switch (b.color) {
@@ -1122,7 +1127,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             case 'G': mainColor = '#4caf50'; break; // Green
                             case 'O': mainColor = '#ff9800'; break; // Orange
                             case 'P': mainColor = '#9c27b0'; break; // Purple
-                            case '2': mainColor = '#888'; break; // Gray
                             case '#': mainColor = '#00bcd4'; break; // Blue
                             default: mainColor = '#f5f5f5'; // White (default)
                         }
@@ -1172,6 +1176,16 @@ document.addEventListener('DOMContentLoaded', function () {
                     ctx.strokeStyle = shadeColor(mainColor, -50);
                     ctx.lineWidth = 2;
                     ctx.strokeRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
+
+                    // Si es un bloque gris y ya recibió un hit, dibujar una línea diagonal
+                    if (b.color === '2' && b.hits === 1) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = '#666666';
+                        ctx.lineWidth = 2;
+                        ctx.moveTo(brickX + 5, brickY + 5);
+                        ctx.lineTo(brickX + BRICK_WIDTH - 5, brickY + BRICK_HEIGHT - 5);
+                        ctx.stroke();
+                    }
 
                     // Reset shadow
                     ctx.shadowBlur = 0;
@@ -1283,90 +1297,49 @@ document.addEventListener('DOMContentLoaded', function () {
                 const b = bricks[c][r];
                 for (let ball of balls) {
                     if ((b.status === 1 || b.indestructible) && ball.x > b.x && ball.x < b.x + BRICK_WIDTH && ball.y > b.y && ball.y < b.y + BRICK_HEIGHT) {
-                        // Si la bola tiene el efecto de fuego
+                        // Primero aplicar el rebote en todos los casos
+                        handleBounce(ball, b);
+
+                        // Luego manejar la destrucción del bloque si corresponde
                         if (activePowerUps.fireBall) {
-                            // Destruir cualquier tipo de bloque
+                            // Si tiene fuego y doble tamaño, puede destruir cualquier bloque
+                            if (activePowerUps.doubleSize) {
+                                b.status = 0;
+                                b.indestructible = false;
+                                score++;
+                                audioBrick.currentTime = 0;
+                                audioBrick.play();
+                                createBrickExplosion(b);
+                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                            } else if (!b.color === '2' && !b.indestructible) {
+                                // Si solo tiene fuego, solo destruye bloques normales
+                                b.status = 0;
+                                b.indestructible = false;
+                                score++;
+                                audioBrick.currentTime = 0;
+                                audioBrick.play();
+                                createBrickExplosion(b);
+                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                            }
+                        } else if (b.color === '2') { // Bloque gris
+                            if (b.hits > 1) {
+                                b.hits--;
+                            } else {
+                                b.status = 0;
+                                score++;
+                                audioBrick.currentTime = 0;
+                                audioBrick.play();
+                                createBrickExplosion(b);
+                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                            }
+                        } else if (!b.indestructible) {
+                            // Otros bloques destructibles
                             b.status = 0;
-                            b.indestructible = false;
                             score++;
                             audioBrick.currentTime = 0;
                             audioBrick.play();
                             createBrickExplosion(b);
                             spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
-                        } else if (!b.indestructible) {
-                            // --- IMPROVED REALISTIC COLLISION PHYSICS ---
-                            // Calculate the impact point relative to the center of the block
-                            const blockCenterX = b.x + BRICK_WIDTH / 2;
-                            const blockCenterY = b.y + BRICK_HEIGHT / 2;
-                            const impactX = ball.x - blockCenterX;
-                            const impactY = ball.y - blockCenterY;
-
-                            // Calculate the previous position of the ball
-                            const prevX = ball.x - ball.dx;
-                            const prevY = ball.y - ball.dy;
-
-                            // Determine the impact side based on the trajectory
-                            let hitSide = '';
-
-                            // Calculate the distances to each edge
-                            const distToLeft = Math.abs(prevX - b.x);
-                            const distToRight = Math.abs(prevX - (b.x + BRICK_WIDTH));
-                            const distToTop = Math.abs(prevY - b.y);
-                            const distToBottom = Math.abs(prevY - (b.y + BRICK_HEIGHT));
-
-                            // Find the nearest edge
-                            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-
-                            if (minDist === distToLeft) hitSide = 'left';
-                            else if (minDist === distToRight) hitSide = 'right';
-                            else if (minDist === distToTop) hitSide = 'top';
-                            else hitSide = 'bottom';
-
-                            // Apply bounce according to the impact side
-                            switch (hitSide) {
-                                case 'left':
-                                case 'right':
-                                    ball.dx = -ball.dx;
-                                    // Adjust position to avoid multiple collisions
-                                    ball.x = hitSide === 'left' ? b.x - ball.radius : b.x + BRICK_WIDTH + ball.radius;
-                                    break;
-                                case 'top':
-                                case 'bottom':
-                                    ball.dy = -ball.dy;
-                                    // Adjust position to avoid multiple collisions
-                                    ball.y = hitSide === 'top' ? b.y - ball.radius : b.y + BRICK_HEIGHT + ball.radius;
-                                    break;
-                            }
-
-                            // Apply a small "spin" effect based on the impact point
-                            const spinFactor = 0.15; // Aumentado para más efecto
-                            if (hitSide === 'left' || hitSide === 'right') {
-                                ball.dy += impactY * spinFactor;
-                            } else {
-                                ball.dx += impactX * spinFactor;
-                            }
-
-                            // Normalize the speed to maintain a constant speed
-                            const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-                            const speedFactor = ball.baseSpeed / currentSpeed;
-                            ball.dx *= speedFactor;
-                            ball.dy *= speedFactor;
-
-                            if (b.indestructible) {
-                                // Play metal sound for indestructible blocks
-                                audioMetalClick.currentTime = 0;
-                                audioMetalClick.play();
-                            } else {
-                                // For all destructible blocks
-                                b.status = 0;
-                                score++;
-                                audioBrick.currentTime = 0;
-                                audioBrick.play();
-                                // Create fading effect
-                                createBrickExplosion(b);
-                                // Power-up: possibility of dropping one
-                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
-                            }
                         }
 
                         // Check if all destructible bricks have been destroyed
@@ -1398,6 +1371,75 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }
             }
+        }
+    }
+
+    // Función auxiliar para manejar el rebote
+    function handleBounce(ball, brick) {
+        // Calculate the impact point relative to the center of the block
+        const blockCenterX = brick.x + BRICK_WIDTH / 2;
+        const blockCenterY = brick.y + BRICK_HEIGHT / 2;
+        const impactX = ball.x - blockCenterX;
+        const impactY = ball.y - blockCenterY;
+
+        // Calculate the previous position of the ball
+        const prevX = ball.x - ball.dx;
+        const prevY = ball.y - ball.dy;
+
+        // Determine the impact side based on the trajectory
+        let hitSide = '';
+
+        // Calculate the distances to each edge
+        const distToLeft = Math.abs(prevX - brick.x);
+        const distToRight = Math.abs(prevX - (brick.x + BRICK_WIDTH));
+        const distToTop = Math.abs(prevY - brick.y);
+        const distToBottom = Math.abs(prevY - (brick.y + BRICK_HEIGHT));
+
+        // Find the nearest edge
+        const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+        if (minDist === distToLeft) hitSide = 'left';
+        else if (minDist === distToRight) hitSide = 'right';
+        else if (minDist === distToTop) hitSide = 'top';
+        else hitSide = 'bottom';
+
+        // Apply bounce according to the impact side
+        switch (hitSide) {
+            case 'left':
+            case 'right':
+                ball.dx = -ball.dx;
+                // Adjust position to avoid multiple collisions
+                ball.x = hitSide === 'left' ? brick.x - ball.radius : brick.x + BRICK_WIDTH + ball.radius;
+                break;
+            case 'top':
+            case 'bottom':
+                ball.dy = -ball.dy;
+                // Adjust position to avoid multiple collisions
+                ball.y = hitSide === 'top' ? brick.y - ball.radius : brick.y + BRICK_HEIGHT + ball.radius;
+                break;
+        }
+
+        // Apply a small "spin" effect based on the impact point
+        const spinFactor = 0.15;
+        if (hitSide === 'left' || hitSide === 'right') {
+            ball.dy += impactY * spinFactor;
+        } else {
+            ball.dx += impactX * spinFactor;
+        }
+
+        // Normalize the speed to maintain a constant speed
+        const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+        const speedFactor = ball.baseSpeed / currentSpeed;
+        ball.dx *= speedFactor;
+        ball.dy *= speedFactor;
+
+        // Play appropriate sound
+        if (brick.indestructible) {
+            audioMetalClick.currentTime = 0;
+            audioMetalClick.play();
+        } else {
+            audioBrick.currentTime = 0;
+            audioBrick.play();
         }
     }
 
