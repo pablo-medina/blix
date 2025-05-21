@@ -10,7 +10,8 @@
     "build:win": "electron-builder build --win --publish never",
     "build:mac": "electron-builder build --mac --publish never",
     "build:linux": "electron-builder build --linux --publish never",
-    "build:web": "webpack --mode production"
+    "build:web": "webpack --mode production",
+    "start:web": "node scripts/start-web.js"
   },
   "author": "",
   "license": "MIT",
@@ -22,6 +23,7 @@
     "css-loader": "^6.8.1",
     "electron-builder": "^24.13.3",
     "html-webpack-plugin": "^5.5.3",
+    "open": "^10.1.2",
     "style-loader": "^3.3.3",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
