@@ -1394,6 +1394,32 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.fillText(`Lives: ${lives}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 55);
     }
 
+    // Función auxiliar para verificar la completación del nivel
+    function checkLevelCompletion() {
+        const destructiblesRestantes = bricks.flat().filter(b => !b.indestructible && b.status === 1).length;
+        if (destructiblesRestantes === 0 && !showLevelMessage) {
+            showLevelMessage = true;
+            if (transitionTimeout) clearTimeout(transitionTimeout);
+            transitionTimeout = setTimeout(() => {
+                showLevelMessage = false;
+                currentLevel++;
+                if (currentLevel < levels.length) {
+                    console.debug("Level completed. Advancing to level " + currentLevel);
+                    loadLevel(currentLevel);
+                    draw();
+                } else {
+                    // Game over - Victory
+                    showGameOver = true;
+                    if (transitionTimeout) clearTimeout(transitionTimeout);
+                    transitionTimeout = setTimeout(() => {
+                        showGameOver = false;
+                        returnToMenu();
+                    }, 5000);
+                }
+            }, 1500);
+        }
+    }
+
     function collisionDetection() {
         for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
             for (let r = 0; r < BRICK_ROW_COUNT; r++) {
@@ -1485,29 +1511,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             }
                         }
 
-                        // Check if all destructible bricks have been destroyed
-                        const destructiblesRestantes = bricks.flat().filter(b => !b.indestructible && b.status === 1).length;
-                        if (destructiblesRestantes === 0 && !showLevelMessage) {
-                            showLevelMessage = true;
-                            if (transitionTimeout) clearTimeout(transitionTimeout);
-                            transitionTimeout = setTimeout(() => {
-                                showLevelMessage = false;
-                                currentLevel++;
-                                if (currentLevel < levels.length) {
-                                    console.debug("Level completed. Advancing to level " + currentLevel);
-                                    loadLevel(currentLevel);
-                                    draw();
-                                } else {
-                                    // Game over - Victory
-                                    showGameOver = true;
-                                    if (transitionTimeout) clearTimeout(transitionTimeout);
-                                    transitionTimeout = setTimeout(() => {
-                                        showGameOver = false;
-                                        returnToMenu();
-                                    }, 5000);
-                                }
-                            }, 1500);
-                        }
+                        // Verificar completación del nivel
+                        checkLevelCompletion();
 
                         // Important: exit the loop after a collision to avoid multiple collisions
                         return;
@@ -2856,29 +2861,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             // Remove the laser
                             laserShots.splice(i, 1);
 
-                            // Check if level is completed
-                            const destructiblesRestantes = bricks.flat().filter(b => !b.indestructible && b.status === 1).length;
-                            if (destructiblesRestantes === 0 && !showLevelMessage) {
-                                showLevelMessage = true;
-                                if (transitionTimeout) clearTimeout(transitionTimeout);
-                                transitionTimeout = setTimeout(() => {
-                                    showLevelMessage = false;
-                                    currentLevel++;
-                                    if (currentLevel < levels.length) {
-                                        console.debug("Level completed. Advancing to level " + currentLevel);
-                                        loadLevel(currentLevel);
-                                        draw();
-                                    } else {
-                                        // Game over - Victory
-                                        showGameOver = true;
-                                        if (transitionTimeout) clearTimeout(transitionTimeout);
-                                        transitionTimeout = setTimeout(() => {
-                                            showGameOver = false;
-                                            returnToMenu();
-                                        }, 5000);
-                                    }
-                                }, 1500);
-                            }
+                            // Verificar completación del nivel
+                            checkLevelCompletion();
                             
                             break;
                         }
