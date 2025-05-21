@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'S+', color: '#ff9800' }, // Faster ball
         { type: 'S-', color: '#ff9800' }, // Slower ball
         { type: 'V', color: '#ffd600' },   // Extra life
-        { type: 'B', color: '#4caf50' },   // Barrier (bottom bounce)
+        { type: 'B', color: '#00bcd4' },   // Barrier (bottom bounce)
         { type: '+', color: '#00ff00' },   // Extra ball (ahora verde)
         { type: 'F', color: '#ff4500' },   // Fire ball
         { type: 'D', color: '#9c27b0' },   // Double size ball
@@ -1676,6 +1676,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function drawPowerUpBars() {
         // Visual indicators of power-up duration with fade in/out
         const barW = 150, barH = 10, gap = 8; // Reduced size and spacing
+        const textWidth = 60; // Ancho reservado para el texto
         // Positioning in the side panel
         let x = gameBorder.right + BORDER_THICKNESS + PANEL_PADDING;
         let y = gameBorder.top + 80; // Adjusted start
@@ -1692,7 +1693,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 type: 'Size',
                 timer: powerUpTimers.sizeStack,
                 alpha: powerUpBarAlpha.sizeStack,
-                color: '#2196f3',
+                color: '#2196f3', // Azul para E+/E-
                 active: activePowerUps.sizeStack !== 0
             });
         }
@@ -1702,7 +1703,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 type: 'Speed',
                 timer: powerUpTimers.speedStack,
                 alpha: powerUpBarAlpha.speedStack,
-                color: '#ff9800',
+                color: '#ff9800', // Naranja para S+/S-
                 active: activePowerUps.speedStack !== 0
             });
         }
@@ -1712,7 +1713,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 type: 'Barrier',
                 timer: powerUpTimers.invincible,
                 alpha: powerUpBarAlpha.invincible,
-                color: '#4caf50',
+                color: '#00bcd4', // Turquesa para Barrier
                 active: activePowerUps.invincible
             });
         }
@@ -1722,7 +1723,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 type: 'Fire',
                 timer: powerUpTimers.fireBall,
                 alpha: powerUpBarAlpha.fireBall,
-                color: '#ff4500',
+                color: '#ff4500', // Rojo para Fire Ball
                 active: activePowerUps.fireBall
             });
         }
@@ -1732,7 +1733,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 type: 'Double',
                 timer: powerUpTimers.doubleSize,
                 alpha: powerUpBarAlpha.doubleSize,
-                color: '#9c27b0',
+                color: '#9c27b0', // Púrpura para Double Size
                 active: activePowerUps.doubleSize
             });
         }
@@ -1742,7 +1743,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 type: 'Laser',
                 timer: powerUpTimers.laser,
                 alpha: powerUpBarAlpha.laser,
-                color: '#e91e63', // Cambiado a rosa
+                color: '#e91e63', // Rosa para Laser
                 active: activePowerUps.laser
             });
         }
@@ -1779,6 +1780,13 @@ document.addEventListener('DOMContentLoaded', function () {
             // Y position (from top to bottom)
             const barY = y + (i * (barH + gap));
 
+            // Dibujar el texto primero
+            ctx.globalAlpha = bar.alpha;
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'left';
+            ctx.fillText(bar.type, x, barY + barH - 2);
+
+            // Dibujar la barra después del texto
             ctx.globalAlpha = bar.alpha;
             ctx.fillStyle = bar.color;
 
@@ -1794,11 +1802,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 ctx.shadowBlur = 10;
             }
 
-            ctx.fillRect(x, barY, barW * (bar.timer / maxDuration), barH);
+            // Dibujar la barra después del texto
+            ctx.fillRect(x + textWidth, barY, (barW - textWidth) * (bar.timer / maxDuration), barH);
             ctx.strokeStyle = '#222';
-            ctx.strokeRect(x, barY, barW, barH);
-            ctx.fillStyle = '#fff';
-            ctx.fillText(bar.type, x + 5, barY + barH - 2);
+            ctx.strokeRect(x + textWidth, barY, barW - textWidth, barH);
 
             // Resetear efectos de brillo
             ctx.shadowBlur = 0;

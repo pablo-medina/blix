@@ -58,7 +58,7 @@ Power-ups appear when breaking blocks and fall down. Catch them with your paddle
 | S+ | Speed Up | Increases ball speed | 10s | Orange |
 | S- | Slow Down | Decreases ball speed | 10s | Orange |
 | V | Extra Life | Adds one life | Instant | Yellow |
-| B | Barrier | Allows ball to bounce on bottom | 15s | Green |
+| B | Barrier | Allows ball to bounce on bottom | 15s | Turquoise |
 | + | Extra Ball | Adds an additional ball | Instant | Green |
 | F | Fire Ball | Ball can destroy blocks without bouncing | 10s | Red |
 | D | Double Size | Doubles ball size | 15s | Purple |
