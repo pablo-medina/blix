@@ -1811,67 +1811,118 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function for the bounce on walls with the new borders
     function handleWallCollisions() {
         for (let ball of balls) {
-            // Bounce on lateral walls (now with border)
-            if (ball.x + ball.dx > gameBorder.right - ball.radius || ball.x + ball.dx < gameBorder.left + ball.radius) {
-                ball.dx = -ball.dx;
-                audioBounce.currentTime = 0;
-                audioBounce.play();
-            }
-
-            // Bounce on the ceiling (now with border)
-            if (ball.y + ball.dy < gameBorder.top + BORDER_THICKNESS + ball.radius) {
-                ball.dy = -ball.dy;
-                audioBounce.currentTime = 0;
-                audioBounce.play();
-            }
-
-            // Bounce on the floor when the invincible power-up is active
-            if (activePowerUps.invincible && ball.y + ball.dy > canvas.height - BORDER_THICKNESS - ball.radius) {
-                ball.dy = -ball.dy;
-                audioBounce.currentTime = 0;
-                audioBounce.play();
-            }
-
-            // Verificar colisión con el paddle y rebote - FÍSICA MEJORADA
             // Calcular la posición siguiente de la bola
-            const nextBallX = ball.x + ball.dx;
-            const nextBallY = ball.y + ball.dy;
+            const nextX = ball.x + ball.dx;
+            const nextY = ball.y + ball.dy;
+            const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
 
-            // Verificamos si la bola va a cruzar la línea superior del paddle
-            if (ball.y + ball.radius <= paddle.y && nextBallY + ball.radius >= paddle.y) {
-                // Verificar si está horizontalmente dentro del paddle
-                if (nextBallX + ball.radius > paddle.x && nextBallX - ball.radius < paddle.x + paddle.width) {
+            // Colisión con bordes laterales
+            if (nextX - currentRadius < gameBorder.left) {
+                ball.x = gameBorder.left + currentRadius;
+                ball.dx = Math.abs(ball.dx); // Asegurar que vaya hacia la derecha
+                audioBounce.currentTime = 0;
+                audioBounce.play();
+            } else if (nextX + currentRadius > gameBorder.right) {
+                ball.x = gameBorder.right - currentRadius;
+                ball.dx = -Math.abs(ball.dx); // Asegurar que vaya hacia la izquierda
+                audioBounce.currentTime = 0;
+                audioBounce.play();
+            }
+
+            // Colisión con el techo
+            if (nextY - currentRadius < gameBorder.top) {
+                ball.y = gameBorder.top + currentRadius;
+                ball.dy = Math.abs(ball.dy); // Asegurar que vaya hacia abajo
+                audioBounce.currentTime = 0;
+                audioBounce.play();
+            }
+
+            // Colisión con el suelo (solo si no hay power-up de invencibilidad)
+            if (!activePowerUps.invincible && nextY + currentRadius > canvas.height) {
+                // Si no es invencible, perder la bola
+                const ballIndex = balls.indexOf(ball);
+                if (ballIndex > -1) {
+                    balls.splice(ballIndex, 1);
+                }
+
+                // Si no quedan bolas, perder una vida
+                if (balls.length === 0) {
+                    lives--;
+                    if (lives <= 0) {
+                        showGameOver = true;
+                        gameOverHandled = false;
+                    } else {
+                        // Iniciar animación de destrucción
+                        isPaddleDestroyed = true;
+                        createPaddleParticles();
+                        
+                        // Esperar a que termine la animación antes de resetear
+                        setTimeout(() => {
+                            isPaddleDestroyed = false;
+                            paddleParticles = [];
+                            paddle.x = (canvas.width - paddle.width) / 2;
+                            paddle.width = paddleOriginalWidth;
+                            paddle.height = paddleOriginalHeight;
+                            resetBalls();
+                            waitingToLaunch = true;
+                            if (launchTimeout) clearTimeout(launchTimeout);
+                            launchTimeout = setTimeout(() => {
+                                launchBall();
+                            }, 3000);
+                            backgroundMusic.playbackRate = 1;
+                            activePowerUps = {
+                                sizeStack: 0,
+                                speedStack: 0,
+                                invincible: false,
+                                fireBall: false
+                            };
+                            speedStackTimer = 0;
+                            powerUps = [];
+                        }, PADDLE_PARTICLE_LIFETIME * 1000);
+                    }
+                }
+            } else if (activePowerUps.invincible && nextY + currentRadius > canvas.height - BORDER_THICKNESS) {
+                // Si es invencible, rebotar en el suelo
+                ball.y = canvas.height - BORDER_THICKNESS - currentRadius;
+                ball.dy = -Math.abs(ball.dy); // Asegurar que vaya hacia arriba
+                audioBounce.currentTime = 0;
+                audioBounce.play();
+            }
+
+            // Verificar colisión con el paddle
+            if (ball.y + currentRadius <= paddle.y && nextY + currentRadius >= paddle.y) {
+                if (nextX + currentRadius > paddle.x && nextX - currentRadius < paddle.x + paddle.width) {
                     // Calcular el punto exacto de colisión en Y
-                    ball.y = paddle.y - ball.radius;
+                    ball.y = paddle.y - currentRadius;
 
-                    // 1. Calcular la posición relativa de impacto (0 a 1)
+                    // Calcular la posición relativa de impacto (0 a 1)
                     const relativeIntersectX = (ball.x - paddle.x) / paddle.width;
 
-                    // 2. Calcular la velocidad del paddle en el momento del impacto
+                    // Calcular la velocidad del paddle en el momento del impacto
                     const paddleSpeed = rightPressed ? paddle.speed : (leftPressed ? -paddle.speed : 0);
 
-                    // 3. Calcular el ángulo base de rebote (más pronunciado en los extremos)
-                    // Usar una función no lineal para hacer más pronunciados los ángulos en los extremos
+                    // Calcular el ángulo base de rebote (más pronunciado en los extremos)
                     const normalizedPosition = relativeIntersectX * 2 - 1; // Convertir a rango -1 a 1
                     const angleFactor = Math.sign(normalizedPosition) * Math.pow(Math.abs(normalizedPosition), 1.5);
                     const maxBounceAngle = Math.PI / 3; // 60 grados máximo
-                    const bounceAngle = angleFactor * maxBounceAngle;
+                    const minBounceAngle = Math.PI / 6; // 30 grados mínimo
+                    let bounceAngle = angleFactor * maxBounceAngle;
 
-                    // 4. Calcular la velocidad actual de la bola
-                    const currentSpeed = ball.baseSpeed; // Usar la velocidad base en lugar de la actual
+                    // Asegurar que el ángulo no sea demasiado horizontal
+                    if (Math.abs(bounceAngle) < minBounceAngle) {
+                        bounceAngle = Math.sign(bounceAngle) * minBounceAngle;
+                    }
 
-                    // 5. Aplicar efecto de "spin" basado en la velocidad del paddle
-                    const spinFactor = 0.2; // Factor de influencia del spin
+                    // Aplicar efecto de "spin" basado en la velocidad del paddle
+                    const spinFactor = 0.2;
                     const spinEffect = paddleSpeed * spinFactor;
 
-                    // 6. Calcular la nueva velocidad (usando la velocidad base)
-                    const newSpeed = currentSpeed;
-
-                    // 7. Aplicar el ángulo y la velocidad
+                    // Calcular la nueva velocidad
+                    const newSpeed = ball.baseSpeed;
                     ball.dx = newSpeed * Math.sin(bounceAngle) + spinEffect;
-                    ball.dy = -Math.abs(newSpeed * Math.cos(bounceAngle)); // Siempre hacia arriba
+                    ball.dy = -Math.abs(newSpeed * Math.cos(bounceAngle));
 
-                    // 8. Asegurar que la velocidad no sea demasiado baja
+                    // Asegurar velocidad mínima
                     const minSpeed = ball.baseSpeed * 0.8;
                     const actualSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
                     if (actualSpeed < minSpeed) {
@@ -1880,74 +1931,26 @@ document.addEventListener('DOMContentLoaded', function () {
                         ball.dy *= speedFactor;
                     }
 
-                    // 9. Limitar la velocidad máxima
-                    const maxSpeed = ball.baseSpeed * 1.2; // Reducido de 2.5 a 1.2 para mantener la velocidad más constante
+                    // Limitar velocidad máxima
+                    const maxSpeed = ball.baseSpeed * 1.2;
                     if (actualSpeed > maxSpeed) {
                         const speedFactor = maxSpeed / actualSpeed;
                         ball.dx *= speedFactor;
                         ball.dy *= speedFactor;
                     }
 
-                    // Reproducir sonido de rebote
+                    // Verificación final para asegurar que no haya rebote horizontal
+                    const finalAngle = Math.atan2(ball.dy, ball.dx);
+                    if (Math.abs(finalAngle) < minBounceAngle) {
+                        const newAngle = Math.sign(finalAngle) * minBounceAngle;
+                        const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                        ball.dx = speed * Math.cos(newAngle);
+                        ball.dy = speed * Math.sin(newAngle);
+                    }
+
                     audioBounce.currentTime = 0;
                     audioBounce.play();
                 }
-            }
-
-            // Check if ball is lost (went below the paddle)
-            if (ball.y + ball.radius > canvas.height) {
-                // If not invincible, remove the ball
-                if (!activePowerUps.invincible) {
-                    const ballIndex = balls.indexOf(ball);
-                    if (ballIndex > -1) {
-                        balls.splice(ballIndex, 1);
-                    }
-
-                    // If no balls left, lose a life
-                    if (balls.length === 0) {
-                        lives--;
-                        if (lives <= 0) {
-                            showGameOver = true;
-                            gameOverHandled = false;
-                        } else {
-                            // Iniciar animación de destrucción
-                            isPaddleDestroyed = true;
-                            createPaddleParticles();
-                            
-                            // Esperar a que termine la animación antes de resetear
-                            setTimeout(() => {
-                                isPaddleDestroyed = false;
-                                paddleParticles = [];
-                                paddle.x = (canvas.width - paddle.width) / 2;
-                                paddle.width = paddleOriginalWidth;
-                                paddle.height = paddleOriginalHeight;
-                                resetBalls();
-                                waitingToLaunch = true;
-                                if (launchTimeout) clearTimeout(launchTimeout);
-                                launchTimeout = setTimeout(() => {
-                                    launchBall();
-                                }, 3000);
-                                backgroundMusic.playbackRate = 1;
-                                activePowerUps = {
-                                    sizeStack: 0,
-                                    speedStack: 0,
-                                    invincible: false,
-                                    fireBall: false
-                                };
-                                speedStackTimer = 0;
-                                powerUps = [];
-                            }, PADDLE_PARTICLE_LIFETIME * 1000);
-                        }
-                    }
-                }
-            }
-
-            // Prevent ball from entering the side panel
-            if (ball.x + ball.dx > gameBorder.right - ball.radius) {
-                ball.x = gameBorder.right - ball.radius;
-                ball.dx = -ball.dx;
-                audioBounce.currentTime = 0;
-                audioBounce.play();
             }
         }
     }
