@@ -2045,13 +2045,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Set the initial state as menu
     menuActive = true;
 
-    // Iniciar animación del menú
-    if (menuLoopId) {
-        cancelAnimationFrame(menuLoopId);
+    // Start the unified game loop
+    if (gameLoopId) {
+        cancelAnimationFrame(gameLoopId);
     }
-    menuLoopId = requestAnimationFrame(menuLoop);
+    gameLoopId = requestAnimationFrame(draw);
 
-    console.debug("Game initialized. Initial state: menuActive=", menuActive, "menuLoopId=", menuLoopId);
+    console.debug("Game initialized. Initial state: menuActive=", menuActive, "gameLoopId=", gameLoopId);
 
     // Function to reset all speeds and effects of the game
     function resetGameSpeeds() {
@@ -2398,12 +2398,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function draw() {
-        // Check if we're in menu mode
-        if (menuActive) {
-            console.debug("WARNING: draw() called while menuActive=true. Canceling frame...");
-            return;
-        }
-
         // Calculate deltaTime in seconds
         const now = performance.now();
         let deltaTime = (now - lastTime) / 1000;
@@ -2418,101 +2412,104 @@ document.addEventListener('DOMContentLoaded', function () {
             lastFpsUpdate = now;
         }
 
-        // Accumulate time
-        accumulator += deltaTime;
-
-        // Update physics with fixed time step
-        while (accumulator >= FIXED_TIME_STEP) {
-            updatePhysics(FIXED_TIME_STEP);
-            accumulator -= FIXED_TIME_STEP;
-        }
-
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw game state
-        drawBricks();
-        drawGameBorders();
-        for (let ball of balls) {
-            drawBall(ball);
-        }
-        updateAndDrawParticles();
-        updateAndDrawLasers();
-        drawPaddle();
-        drawScore();
-        drawLives();
-        drawPowerUps();
-        drawPowerUpBars();
+        if (menuActive) {
+            // Draw menu state
+            drawMenu();
+        } else {
+            // Game state logic
+            // Only update physics if not paused and not showing messages
+            if (!paused && !showLevelMessage && !showGameOver) {
+                // Accumulate time
+                accumulator += deltaTime;
 
-        // Draw FPS counter (debug) only if enabled
-        if (showFpsCounter) {
-            ctx.save();
-            ctx.font = '12px Arial';
-            ctx.fillStyle = '#fff';
-            ctx.textAlign = 'left';
-            ctx.fillText(`FPS: ${currentFps}`, 10, 20);
-            ctx.restore();
-        }
-
-        if (paused) {
-            drawPause();
-            gameLoopId = requestAnimationFrame(draw);
-            return;
-        }
-
-        if (showLevelMessage) {
-            drawLevelMessage('Level Complete!');
-            gameLoopId = requestAnimationFrame(draw);
-            return;
-        }
-
-        if (showGameOver) {
-            drawLevelMessage('GAME OVER');
-            if (!gameOverHandled) {
-                gameOverHandled = true;
-                if (transitionTimeout) {
-                    clearTimeout(transitionTimeout);
-                    transitionTimeout = null;
+                // Update physics with fixed time step
+                while (accumulator >= FIXED_TIME_STEP) {
+                    updatePhysics(FIXED_TIME_STEP);
+                    accumulator -= FIXED_TIME_STEP;
                 }
-                if (launchTimeout) {
-                    clearTimeout(launchTimeout);
-                    launchTimeout = null;
-                }
-
-                transitionTimeout = setTimeout(() => {
-                    showGameOver = false;
-                    if (gameLoopId) {
-                        cancelAnimationFrame(gameLoopId);
-                        gameLoopId = null;
-                    }
-                    menuActive = true;
-                    currentLevel = 0;
-                    returnToMenu();
-                    gameOverHandled = false;
-                }, 3000);
             }
-            gameLoopId = requestAnimationFrame(draw);
-            return;
-        }
 
-        if (waitingToLaunch) {
-            // Update ball position to follow paddle
+            // Draw game state
+            drawBricks();
+            drawGameBorders();
             for (let ball of balls) {
-                ball.x = paddle.x + paddle.width / 2;
-                ball.y = paddle.y - ball.radius;
+                drawBall(ball);
             }
-            gameLoopId = requestAnimationFrame(draw);
-            return;
+            updateAndDrawParticles();
+            updateAndDrawLasers();
+            drawPaddle();
+            drawScore();
+            drawLives();
+            drawPowerUps();
+            drawPowerUpBars();
+
+            // Draw FPS counter (debug) only if enabled
+            if (showFpsCounter) {
+                ctx.save();
+                ctx.font = '12px Arial';
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'left';
+                ctx.fillText(`FPS: ${currentFps}`, 10, 20);
+                ctx.restore();
+            }
+
+            if (paused) {
+                drawPause();
+                gameLoopId = requestAnimationFrame(draw);
+                return;
+            }
+
+            if (showLevelMessage) {
+                drawLevelMessage('Level Complete!');
+                gameLoopId = requestAnimationFrame(draw);
+                return;
+            }
+
+            if (showGameOver) {
+                drawLevelMessage('GAME OVER');
+                if (!gameOverHandled) {
+                    gameOverHandled = true;
+                    if (transitionTimeout) {
+                        clearTimeout(transitionTimeout);
+                        transitionTimeout = null;
+                    }
+                    if (launchTimeout) {
+                        clearTimeout(launchTimeout);
+                        launchTimeout = null;
+                    }
+
+                    transitionTimeout = setTimeout(() => {
+                        showGameOver = false;
+                        if (gameLoopId) {
+                            cancelAnimationFrame(gameLoopId);
+                            gameLoopId = null;
+                        }
+                        menuActive = true;
+                        currentLevel = 0;
+                        returnToMenu();
+                        gameOverHandled = false;
+                    }, 3000);
+                }
+                gameLoopId = requestAnimationFrame(draw);
+                return;
+            }
+
+            if (waitingToLaunch) {
+                // Update ball position to follow paddle
+                for (let ball of balls) {
+                    ball.x = paddle.x + paddle.width / 2;
+                    ball.y = paddle.y - ball.radius;
+                }
+                gameLoopId = requestAnimationFrame(draw);
+                return;
+            }
         }
 
         // Request next frame
         gameLoopId = requestAnimationFrame(draw);
-    }
-
-    // Función del loop del menú con animación
-    function menuLoop() {
-        drawMenu();
-        requestAnimationFrame(menuLoop);
     }
 
     function startGame() {
@@ -2563,8 +2560,6 @@ document.addEventListener('DOMContentLoaded', function () {
         console.debug("Starting returnToMenu(). Initial state: menuActive=", menuActive, "currentLevel=", currentLevel);
 
         // 1. COMPLETELY STOP THE GAME AND ALL TIMERS
-
-        // Cancel game drawing cycle
         if (gameLoopId) {
             console.debug("Canceling gameLoopId:", gameLoopId);
             cancelAnimationFrame(gameLoopId);
@@ -2585,7 +2580,6 @@ document.addEventListener('DOMContentLoaded', function () {
         document.removeEventListener('keydown', playOnKey);
 
         // 2. RESET ALL STATE VARIABLES
-
         menuActive = true; // CRUCIAL: activate menu mode
         showControls = false;
         selectedMenu = 0;
@@ -2609,7 +2603,6 @@ document.addEventListener('DOMContentLoaded', function () {
         resetGameSpeeds();
 
         // 3. RESTORE MENU INTERFACE
-
         // Reset paddle and ball state
         paddle.width = paddleOriginalWidth;
         paddle.height = paddleOriginalHeight;
@@ -2620,22 +2613,14 @@ document.addEventListener('DOMContentLoaded', function () {
         document.addEventListener('keydown', menuKeyDownHandler);
 
         // 4. START MENU CYCLE
-
         // Complete canvas cleanup
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw menu immediately to avoid blank screen
-        drawMenu();
-
-        // Start menu animation with requestAnimationFrame
-        if (menuLoopId) {
-            cancelAnimationFrame(menuLoopId);
-            menuLoopId = null;
-        }
-        menuLoopId = requestAnimationFrame(menuLoop);
+        // Start unified game loop
+        gameLoopId = requestAnimationFrame(draw);
 
         console.debug("Menu activated. Final state: menuActive=", menuActive,
-            "gameLoopId=", gameLoopId, "menuLoopId=", menuLoopId,
+            "gameLoopId=", gameLoopId,
             "currentLevel=", currentLevel);
     }
 
