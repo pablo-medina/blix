@@ -793,6 +793,87 @@ document.addEventListener('DOMContentLoaded', function () {
         ball.dy = Math.abs(Math.sin(angle) * speed) * signDy;
     }
 
+    // Sistema de partículas para efectos de fuego
+    const fireParticles = [];
+    const smokeParticles = [];
+    const MAX_FIRE_PARTICLES = 20;
+    const MAX_SMOKE_PARTICLES = 15;
+
+    // Función para crear una partícula de fuego
+    function createFireParticle(x, y) {
+        return {
+            x: x,
+            y: y,
+            size: Math.random() * 4 + 2,
+            speedX: (Math.random() - 0.5) * 2,
+            speedY: -Math.random() * 2 - 1,
+            life: 1.0,
+            color: `hsl(${Math.random() * 30 + 15}, 100%, ${Math.random() * 20 + 50}%)`
+        };
+    }
+
+    // Función para crear una partícula de humo
+    function createSmokeParticle(x, y) {
+        return {
+            x: x,
+            y: y,
+            size: Math.random() * 6 + 4,
+            speedX: (Math.random() - 0.5) * 1.5,
+            speedY: -Math.random() * 1.5 - 0.5,
+            life: 1.0,
+            alpha: 0.7
+        };
+    }
+
+    // Función para actualizar y dibujar las partículas
+    function updateAndDrawParticles() {
+        // Actualizar y dibujar partículas de fuego
+        for (let i = fireParticles.length - 1; i >= 0; i--) {
+            const p = fireParticles[i];
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.life -= 0.02;
+            p.size *= 0.95;
+
+            if (p.life <= 0) {
+                fireParticles.splice(i, 1);
+                continue;
+            }
+
+            ctx.save();
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Actualizar y dibujar partículas de humo
+        for (let i = smokeParticles.length - 1; i >= 0; i--) {
+            const p = smokeParticles[i];
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.life -= 0.01;
+            p.size *= 1.02;
+            p.alpha *= 0.95;
+
+            if (p.life <= 0) {
+                smokeParticles.splice(i, 1);
+                continue;
+            }
+
+            ctx.save();
+            ctx.globalAlpha = p.alpha * p.life;
+            ctx.fillStyle = `rgba(100, 100, 100, ${p.alpha})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // Modificar la función drawBall para incluir los efectos de fuego
     function drawBall(ball) {
         // Ball as sphere with radial gradient
         ctx.save();
@@ -800,15 +881,15 @@ document.addEventListener('DOMContentLoaded', function () {
         // Calculate ball radius based on power-up
         const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
 
-        // If the ball has fire effect
+        // Si la bola tiene efecto de fuego
         if (activePowerUps.fireBall) {
-            // Calculate blinking if less than 3 seconds remaining
+            // Calcular parpadeo si quedan menos de 3 segundos
             let alpha = 1.0;
             if (powerUpTimers.fireBall <= 3.0) {
                 alpha = 0.3 + 0.7 * Math.abs(Math.sin(powerUpTimers.fireBall * Math.PI * 2));
             }
 
-            // Fire gradient
+            // Gradiente de fuego
             const grad = ctx.createRadialGradient(
                 ball.x - currentRadius / 3,
                 ball.y - currentRadius / 3,
@@ -822,20 +903,35 @@ document.addEventListener('DOMContentLoaded', function () {
             grad.addColorStop(0.7, `rgba(255, 69, 0, ${alpha})`);
             grad.addColorStop(1, `rgba(255, 0, 0, ${alpha})`);
 
-            // Draw ball with fire gradient
+            // Dibujar bola con gradiente de fuego
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, currentRadius, 0, Math.PI * 2);
             ctx.fillStyle = grad;
             ctx.fill();
 
-            // Add glow effect
+            // Efecto de resplandor
             ctx.shadowColor = `rgba(255, 69, 0, ${alpha * 0.5})`;
             ctx.shadowBlur = 10;
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, currentRadius, 0, Math.PI * 2);
             ctx.fill();
+
+            // Generar partículas de fuego y humo
+            if (Math.random() < 0.3 && fireParticles.length < MAX_FIRE_PARTICLES) {
+                fireParticles.push(createFireParticle(
+                    ball.x + (Math.random() - 0.5) * currentRadius,
+                    ball.y + (Math.random() - 0.5) * currentRadius
+                ));
+            }
+
+            if (Math.random() < 0.2 && smokeParticles.length < MAX_SMOKE_PARTICLES) {
+                smokeParticles.push(createSmokeParticle(
+                    ball.x + (Math.random() - 0.5) * currentRadius * 1.5,
+                    ball.y + (Math.random() - 0.5) * currentRadius * 1.5
+                ));
+            }
         } else {
-            // Normal ball
+            // Bola normal
             const grad = ctx.createRadialGradient(
                 ball.x - currentRadius / 3,
                 ball.y - currentRadius / 3,
@@ -1297,34 +1393,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 const b = bricks[c][r];
                 for (let ball of balls) {
                     if ((b.status === 1 || b.indestructible) && ball.x > b.x && ball.x < b.x + BRICK_WIDTH && ball.y > b.y && ball.y < b.y + BRICK_HEIGHT) {
-                        // Primero aplicar el rebote en todos los casos
-                        handleBounce(ball, b);
+                        // Calcular el radio actual de la bola
+                        const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
+                        const isBigBall = activePowerUps.doubleSize;
 
-                        // Luego manejar la destrucción del bloque si corresponde
+                        // Lógica para bolas de fuego
                         if (activePowerUps.fireBall) {
-                            // Si tiene fuego y doble tamaño, puede destruir cualquier bloque
-                            if (activePowerUps.doubleSize) {
-                                b.status = 0;
-                                b.indestructible = false;
-                                score++;
-                                audioBrick.currentTime = 0;
-                                audioBrick.play();
-                                createBrickExplosion(b);
-                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
-                            } else if (!b.color === '2' && !b.indestructible) {
-                                // Si solo tiene fuego, solo destruye bloques normales
-                                b.status = 0;
-                                b.indestructible = false;
-                                score++;
-                                audioBrick.currentTime = 0;
-                                audioBrick.play();
-                                createBrickExplosion(b);
-                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
-                            }
-                        } else if (b.color === '2') { // Bloque gris
-                            if (b.hits > 1) {
-                                b.hits--;
-                            } else {
+                            // Para bloques normales: atravesar y destruir
+                            if (!b.indestructible && b.color !== '2') {
                                 b.status = 0;
                                 score++;
                                 audioBrick.currentTime = 0;
@@ -1332,14 +1408,74 @@ document.addEventListener('DOMContentLoaded', function () {
                                 createBrickExplosion(b);
                                 spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                             }
-                        } else if (!b.indestructible) {
-                            // Otros bloques destructibles
-                            b.status = 0;
-                            score++;
-                            audioBrick.currentTime = 0;
-                            audioBrick.play();
-                            createBrickExplosion(b);
-                            spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                            // Para bloques grises (2 hits): solo atravesar si es bola grande
+                            else if (b.color === '2') {
+                                if (isBigBall) {
+                                    b.status = 0;
+                                    score++;
+                                    audioBrick.currentTime = 0;
+                                    audioBrick.play();
+                                    createBrickExplosion(b);
+                                    spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                                } else {
+                                    // Si es bola normal, comportarse como una bola sin fuego
+                                    handleBounce(ball, b);
+                                    if (b.hits > 1) {
+                                        b.hits--;
+                                    } else {
+                                        b.status = 0;
+                                        score++;
+                                        audioBrick.currentTime = 0;
+                                        audioBrick.play();
+                                        createBrickExplosion(b);
+                                        spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                                    }
+                                }
+                            }
+                            // Para bloques indestructibles: solo atravesar si es bola grande
+                            else if (b.indestructible) {
+                                if (isBigBall) {
+                                    b.status = 0;
+                                    b.indestructible = false;
+                                    score++;
+                                    audioBrick.currentTime = 0;
+                                    audioBrick.play();
+                                    createBrickExplosion(b);
+                                    spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                                } else {
+                                    // Si es bola normal, rebotar pero destruir
+                                    handleBounce(ball, b);
+                                    b.status = 0;
+                                    b.indestructible = false;
+                                    score++;
+                                    audioBrick.currentTime = 0;
+                                    audioBrick.play();
+                                    createBrickExplosion(b);
+                                    spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                                }
+                            }
+                        } else {
+                            // Lógica normal para bolas sin fuego
+                            handleBounce(ball, b);
+                            if (b.color === '2') { // Bloque gris
+                                if (b.hits > 1) {
+                                    b.hits--;
+                                } else {
+                                    b.status = 0;
+                                    score++;
+                                    audioBrick.currentTime = 0;
+                                    audioBrick.play();
+                                    createBrickExplosion(b);
+                                    spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                                }
+                            } else if (!b.indestructible) {
+                                b.status = 0;
+                                score++;
+                                audioBrick.currentTime = 0;
+                                audioBrick.play();
+                                createBrickExplosion(b);
+                                spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
+                            }
                         }
 
                         // Check if all destructible bricks have been destroyed
@@ -1374,66 +1510,84 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Función auxiliar para manejar el rebote
+    // Función auxiliar para manejar el rebote con físicas realistas
     function handleBounce(ball, brick) {
-        // Calculate the impact point relative to the center of the block
+        // 1. Calcular el punto de impacto relativo al centro del bloque
         const blockCenterX = brick.x + BRICK_WIDTH / 2;
         const blockCenterY = brick.y + BRICK_HEIGHT / 2;
         const impactX = ball.x - blockCenterX;
         const impactY = ball.y - blockCenterY;
 
-        // Calculate the previous position of the ball
+        // 2. Calcular la posición anterior de la bola
         const prevX = ball.x - ball.dx;
         const prevY = ball.y - ball.dy;
 
-        // Determine the impact side based on the trajectory
+        // 3. Determinar el lado de impacto basado en la trayectoria
         let hitSide = '';
+        let normalX = 0;
+        let normalY = 0;
 
-        // Calculate the distances to each edge
+        // Calcular las distancias a cada borde
         const distToLeft = Math.abs(prevX - brick.x);
         const distToRight = Math.abs(prevX - (brick.x + BRICK_WIDTH));
         const distToTop = Math.abs(prevY - brick.y);
         const distToBottom = Math.abs(prevY - (brick.y + BRICK_HEIGHT));
 
-        // Find the nearest edge
+        // Encontrar el borde más cercano y su vector normal
         const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
 
-        if (minDist === distToLeft) hitSide = 'left';
-        else if (minDist === distToRight) hitSide = 'right';
-        else if (minDist === distToTop) hitSide = 'top';
-        else hitSide = 'bottom';
-
-        // Apply bounce according to the impact side
-        switch (hitSide) {
-            case 'left':
-            case 'right':
-                ball.dx = -ball.dx;
-                // Adjust position to avoid multiple collisions
-                ball.x = hitSide === 'left' ? brick.x - ball.radius : brick.x + BRICK_WIDTH + ball.radius;
-                break;
-            case 'top':
-            case 'bottom':
-                ball.dy = -ball.dy;
-                // Adjust position to avoid multiple collisions
-                ball.y = hitSide === 'top' ? brick.y - ball.radius : brick.y + BRICK_HEIGHT + ball.radius;
-                break;
+        if (minDist === distToLeft) {
+            hitSide = 'left';
+            normalX = -1;
+            normalY = 0;
+            ball.x = brick.x - ball.radius;
+        } else if (minDist === distToRight) {
+            hitSide = 'right';
+            normalX = 1;
+            normalY = 0;
+            ball.x = brick.x + BRICK_WIDTH + ball.radius;
+        } else if (minDist === distToTop) {
+            hitSide = 'top';
+            normalX = 0;
+            normalY = -1;
+            ball.y = brick.y - ball.radius;
+        } else {
+            hitSide = 'bottom';
+            normalX = 0;
+            normalY = 1;
+            ball.y = brick.y + BRICK_HEIGHT + ball.radius;
         }
 
-        // Apply a small "spin" effect based on the impact point
+        // 4. Calcular el vector de velocidad actual
+        const velocityX = ball.dx;
+        const velocityY = ball.dy;
+
+        // 5. Calcular el producto punto para la reflexión
+        const dotProduct = velocityX * normalX + velocityY * normalY;
+
+        // 6. Aplicar la ley de reflexión: R = V - 2(V·N)N
+        ball.dx = velocityX - 2 * dotProduct * normalX;
+        ball.dy = velocityY - 2 * dotProduct * normalY;
+
+        // 7. Aplicar efecto de "spin" basado en el punto de impacto
         const spinFactor = 0.15;
         if (hitSide === 'left' || hitSide === 'right') {
-            ball.dy += impactY * spinFactor;
+            // Spin vertical basado en la posición Y del impacto
+            const relativeY = (ball.y - brick.y) / BRICK_HEIGHT;
+            ball.dy += (relativeY - 0.5) * spinFactor * ball.baseSpeed;
         } else {
-            ball.dx += impactX * spinFactor;
+            // Spin horizontal basado en la posición X del impacto
+            const relativeX = (ball.x - brick.x) / BRICK_WIDTH;
+            ball.dx += (relativeX - 0.5) * spinFactor * ball.baseSpeed;
         }
 
-        // Normalize the speed to maintain a constant speed
+        // 8. Normalizar la velocidad para mantener una velocidad constante
         const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
         const speedFactor = ball.baseSpeed / currentSpeed;
         ball.dx *= speedFactor;
         ball.dy *= speedFactor;
 
-        // Play appropriate sound
+        // 9. Reproducir sonido apropiado
         if (brick.indestructible) {
             audioMetalClick.currentTime = 0;
             audioMetalClick.play();
@@ -2152,6 +2306,7 @@ document.addEventListener('DOMContentLoaded', function () {
         for (let ball of balls) {
             drawBall(ball);
         }
+        updateAndDrawParticles(); // Agregar esta línea después de dibujar las bolas
         drawPaddle();
         drawScore();
         drawLives();
