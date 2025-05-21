@@ -446,67 +446,11 @@ document.addEventListener('DOMContentLoaded', function () {
     backgroundMusic.loop = true;
     backgroundMusic.volume = 0.5; // You can adjust the volume if desired
 
-    // Audio analysis variables
-    let audioContext = null;
-    let analyser = null;
-    let dataArray = null;
-    let source = null;
-    let audioInitialized = false;
-
-    // Improved function to initialize audio
-    function initAudioAnalysis() {
-        if (audioInitialized) {
-            console.debug("Audio analyzer already initialized");
-            return;
-        }
-
-        try {
-            // Create audio context only if it doesn't exist
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                console.debug("AudioContext created");
-            }
-
-            // Create analyzer
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 1024;
-            analyser.smoothingTimeConstant = 0.6;
-            const bufferLength = analyser.frequencyBinCount;
-            dataArray = new Uint8Array(bufferLength);
-
-            // Connect music to analyzer
-            if (!source) {
-                source = audioContext.createMediaElementSource(backgroundMusic);
-                source.connect(analyser);
-                analyser.connect(audioContext.destination);
-                console.debug("Audio source connected to analyzer");
-            }
-
-            // Events to monitor music state
-            backgroundMusic.addEventListener('play', () => {
-                console.debug("Music started - Analyzer active");
-                // Ensure audio context is running
-                if (audioContext.state === 'suspended') {
-                    audioContext.resume();
-                }
-            });
-
-            backgroundMusic.addEventListener('pause', () => {
-                console.debug("Music paused - Analyzer inactive");
-            });
-
-            audioInitialized = true;
-            console.debug("Audio analysis initialized successfully with FFT size:", analyser.fftSize);
-        } catch (error) {
-            console.debug("Error initializing audio analysis:", error);
-            // Don't reset variables here, we'll try to reinitialize later
-        }
-    }
+    // Audio analysis variables    
+    let audioInitialized = false;    
 
     // Modify initBackgroundMusic function to ensure correct initialization
-    function initBackgroundMusic() {
-        // Try to initialize audio analysis
-        initAudioAnalysis();
+    function initBackgroundMusic() {       
 
         // Try to play music
         backgroundMusic.play().catch(error => {
@@ -517,10 +461,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Modify click event to ensure initialization
     document.addEventListener('click', function playOnClick() {
         if (backgroundMusic.paused) {
-            // Ensure audio is initialized
-            if (!audioInitialized) {
-                initAudioAnalysis();
-            }
+            // Ensure audio is initialized            
 
             backgroundMusic.play().then(() => {
                 console.debug("Music started by user interaction");
@@ -535,10 +476,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const playOnKey = function (e) {
         if (backgroundMusic.paused) {
             // Ensure audio is initialized
-            if (!audioInitialized) {
-                initAudioAnalysis();
-            }
-
             backgroundMusic.play().then(() => {
                 console.debug("Music started by user interaction (keyboard)");
                 document.removeEventListener('keydown', playOnKey);
@@ -1190,14 +1127,15 @@ document.addEventListener('DOMContentLoaded', function () {
     let currentAnimatedBlock = null;
     let animationTimer = 0;
 
-    // Constantes de animación
-    const MIN_ANIMATION_DURATION = 300;
-    const MAX_ANIMATION_DURATION = 800; // Base duration, will be adjusted by audio
-    const BLOCK_CHANGE_INTERVAL = 1000; // Tiempo entre cambios de bloques animados
-    const MAX_ANIMATED_BLOCKS_PERCENTAGE = 0.2; // 20% del total de bloques activos
+    // Animation constants
+    const ANIMATION_PATTERNS = 4; // Number of different animation patterns
+    const MIN_ANIMATION_DURATION = 800; // Increased from 300 to 800
+    const MAX_ANIMATION_DURATION = 2000; // Increased from 800 to 2000
+    const BLOCK_CHANGE_INTERVAL = 2000; // Increased from 1000 to 2000
+    const MAX_ANIMATED_BLOCKS_PERCENTAGE = 0.2; // 20% of total active blocks
 
     // Add at the top with other game variables
-    let animatedBlocks = []; // Array para mantener múltiples bloques animados
+    let animatedBlocks = []; // Array to maintain multiple animated blocks
     const FREQUENCY_BANDS = 8; // Número de bandas de frecuencia a analizar
     const PEAK_THRESHOLD = 0.2; // Reducido el umbral para detectar más picos
     const PEAK_COOLDOWN = 50; // Reducido el tiempo entre picos
@@ -1279,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const now = Date.now();
 
         // Clear blocks that have finished their animation
-        animatedBlocks = animatedBlocks.filter(block => now - block.timer < block.duration);
+        animatedBlocks = animatedBlocks.filter(block => now - block.startTime < block.duration);
 
         // Count active blocks
         let activeBlocksCount = 0;
@@ -1294,102 +1232,33 @@ document.addEventListener('DOMContentLoaded', function () {
         // Calculate maximum animated blocks (20% of total)
         const maxAnimatedBlocks = Math.max(1, Math.floor(activeBlocksCount * MAX_ANIMATED_BLOCKS_PERCENTAGE));
 
-        // Get audio data if available
-        let audioIntensity = 0.5; // Default value
-        let maxAudioIntensity = 0.5; // For adjusting maximum duration
-        let peakIntensity = 0.5; // For glow effect
-        let drumIntensity = 0.5; // For percussion
-
-        if (analyser && dataArray && !backgroundMusic.paused) {
-            try {
-                analyser.getByteFrequencyData(dataArray);
-
-                // Calculate average audio intensity
-                const sum = dataArray.reduce((a, b) => a + b, 0);
-                audioIntensity = Math.min(1, Math.max(0.3, sum / (dataArray.length * 128)));
-
-                // Calculate maximum intensity for duration adjustment
-                const maxValue = Math.max(...dataArray);
-                maxAudioIntensity = Math.min(1, Math.max(0.3, maxValue / 255));
-
-                // Detect percussion in mid-low frequencies
-                const drumStart = Math.floor(dataArray.length * DRUM_FREQ_START);
-                const drumEnd = Math.floor(dataArray.length * DRUM_FREQ_END);
-                const drumFreqs = dataArray.slice(drumStart, drumEnd);
-
-                // Calculate percussion energy
-                const drumEnergy = drumFreqs.reduce((a, b) => a + b, 0) / (drumEnd - drumStart);
-                const normalizedDrumEnergy = drumEnergy / 128;
-
-                // Update percussion history
-                drumHistory.push(normalizedDrumEnergy);
-                drumHistory.shift();
-
-                // Calculate difference with previous frame
-                const drumDiff = normalizedDrumEnergy - lastDrumIntensity;
-
-                // Detect percussion peaks
-                if (drumDiff > DRUM_THRESHOLD && normalizedDrumEnergy > 0.3) {
-                    drumIntensity = Math.min(1, drumDiff * 2);
-                } else {
-                    drumIntensity = Math.max(0.3, drumIntensity * DRUM_DECAY);
-                }
-
-                lastDrumIntensity = normalizedDrumEnergy;
-
-                // Calculate peak intensity for glow effect
-                const highFreqSum = dataArray.slice(-dataArray.length / 4).reduce((a, b) => a + b, 0);
-                peakIntensity = Math.min(1, Math.max(0.3, highFreqSum / (dataArray.length / 4 * 128)));
-
-                // Combine percussion intensity with general intensity
-                audioIntensity = Math.max(audioIntensity, drumIntensity);
-
-            } catch (error) {
-                console.debug("Error getting audio data:", error);
-            }
-        }
-
-        // Adjust maximum duration based on audio intensity
-        const currentMaxDuration = MIN_ANIMATION_DURATION + (MAX_ANIMATION_DURATION - MIN_ANIMATION_DURATION) * maxAudioIntensity;
-
         // Select new blocks to animate if needed
         if (animatedBlocks.length < maxAnimatedBlocks && now - animationTimer > BLOCK_CHANGE_INTERVAL) {
             // Find all active blocks that are not being animated
             const activeBlocks = [];
             for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
                 for (let r = 0; r < BRICK_ROW_COUNT; r++) {
-                    if (bricks[c][r].status === 1 || bricks[c][r].indestructible) {
-                        // Verify block is not already being animated
-                        if (!animatedBlocks.some(block => block.c === c && block.r === r)) {
-                            activeBlocks.push({ c, r });
-                        }
+                    if ((bricks[c][r].status === 1 || bricks[c][r].indestructible) && 
+                        !animatedBlocks.some(block => block.c === c && block.r === r)) {
+                        activeBlocks.push({ c, r });
                     }
                 }
             }
 
-            // Select random blocks until reaching maximum
+            // Select random blocks to animate
             while (animatedBlocks.length < maxAnimatedBlocks && activeBlocks.length > 0) {
                 const randomIndex = Math.floor(Math.random() * activeBlocks.length);
-                const randomBlock = activeBlocks[randomIndex];
-
-                // Calculate animation duration based on audio and percussion intensity
-                const duration = MIN_ANIMATION_DURATION + (currentMaxDuration - MIN_ANIMATION_DURATION) * audioIntensity;
-
+                const block = activeBlocks.splice(randomIndex, 1)[0];
                 animatedBlocks.push({
-                    c: randomBlock.c,
-                    r: randomBlock.r,
-                    timer: now,
-                    duration: duration,
-                    intensity: Math.max(audioIntensity, drumIntensity) // Use highest intensity
+                    ...block,
+                    ...generateAnimationPattern()
                 });
-
-                // Remove selected block to avoid repetition
-                activeBlocks.splice(randomIndex, 1);
             }
 
             animationTimer = now;
         }
 
+        // Draw all bricks
         for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
             for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                 const b = bricks[c][r];
@@ -1405,13 +1274,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         mainColor = '#00ffff'; // Cyan for indestructible
                     } else if (b.color === '2') { // Gray block
                         if (b.hits === 1) {
-                            // Si ya recibió un hit, hacer el bloque más claro
                             mainColor = '#aaaaaa';
                         } else {
                             mainColor = '#888888';
                         }
                     } else {
-                        // Colors according to the type of block
                         switch (b.color) {
                             case 'W': mainColor = '#f5f5f5'; break; // White
                             case 'Y': mainColor = '#ffd600'; break; // Yellow
@@ -1427,59 +1294,21 @@ document.addEventListener('DOMContentLoaded', function () {
                     // Check if this block is being animated
                     const animatedBlock = animatedBlocks.find(block => block.c === c && block.r === r);
                     if (animatedBlock) {
-                        // Calculate animation progress (0 to 1)
-                        const progress = (now - animatedBlock.timer) / animatedBlock.duration;
-                        if (progress < 1) {
-                            // Usar una curva más dramática para la interpolación
-                            const t = Math.sin(progress * Math.PI);
-
-                            // Interpolar entre el color original y blanco puro
-                            const r1 = parseInt(mainColor.slice(1, 3), 16);
-                            const g1 = parseInt(mainColor.slice(3, 5), 16);
-                            const b1 = parseInt(mainColor.slice(5, 7), 16);
-
-                            // Hacer la transición más dramática y ajustar por intensidad
-                            const intensity = animatedBlock.intensity;
-                            const r = Math.round(r1 + (255 - r1) * t * t * intensity);
-                            const g = Math.round(g1 + (255 - g1) * t * t * intensity);
-                            const b = Math.round(b1 + (255 - b1) * t * t * intensity);
-
-                            mainColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-
-                            // Efecto de brillo más intenso, ajustado por la intensidad de los picos
-                            ctx.shadowColor = '#ffffff';
-                            // El resplandor varía entre 10 y 40 según la intensidad de los picos
-                            ctx.shadowBlur = 10 + (30 * peakIntensity * t);
-                        }
+                        const intensity = calculateAnimationIntensity(animatedBlock);
+                        
+                        // Apply glow effect based on animation intensity
+                        ctx.shadowColor = mainColor;
+                        ctx.shadowBlur = 10 + intensity * 20;
+                        
+                        // Adjust color brightness based on animation
+                        const color = adjustColorBrightness(mainColor, intensity * 0.5);
+                        ctx.fillStyle = color;
+                    } else {
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = mainColor;
                     }
 
-                    // Create gradient for the block with more contrast
-                    const gradient = ctx.createLinearGradient(brickX, brickY, brickX, brickY + BRICK_HEIGHT);
-                    gradient.addColorStop(0, shadeColor(mainColor, 40));
-                    gradient.addColorStop(1, shadeColor(mainColor, -40));
-
-                    // Draw block with gradient
-                    ctx.fillStyle = gradient;
-                    ctx.beginPath();
-                    ctx.rect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
-                    ctx.fill();
-
-                    // Draw border normal
-                    ctx.strokeStyle = shadeColor(mainColor, -50);
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
-
-                    // Si es un bloque gris y ya recibió un hit, dibujar una línea diagonal
-                    if (b.color === '2' && b.hits === 1) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = '#666666';
-                        ctx.lineWidth = 2;
-                        ctx.moveTo(brickX + 5, brickY + 5);
-                        ctx.lineTo(brickX + BRICK_WIDTH - 5, brickY + BRICK_HEIGHT - 5);
-                        ctx.stroke();
-                    }
-
-                    // Reset shadow
+                    ctx.fillRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
                     ctx.shadowBlur = 0;
                 }
             }
@@ -1487,6 +1316,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Draw the fading blocks
         drawFadingBlocks();
+    }
+
+    // Función auxiliar para ajustar el brillo de un color
+    function adjustColorBrightness(color, factor) {
+        // Convertir color hex a RGB
+        const r = parseInt(color.slice(1, 3), 16);
+        const g = parseInt(color.slice(3, 5), 16);
+        const b = parseInt(color.slice(5, 7), 16);
+        
+        // Ajustar brillo
+        const newR = Math.min(255, Math.max(0, r + (255 - r) * factor));
+        const newG = Math.min(255, Math.max(0, g + (255 - g) * factor));
+        const newB = Math.min(255, Math.max(0, b + (255 - b) * factor));
+        
+        // Convertir de vuelta a hex
+        return `#${Math.round(newR).toString(16).padStart(2, '0')}${Math.round(newG).toString(16).padStart(2, '0')}${Math.round(newB).toString(16).padStart(2, '0')}`;
     }
 
     // Function to create an explosion when a brick is destroyed
@@ -1531,40 +1376,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const newWidth = block.originalWidth * scaleFactor;
             const newHeight = block.originalHeight * scaleFactor;
 
-            // Calculate central position to animate from the center
-            const centerX = block.x + block.originalWidth / 2;
-            const centerY = block.y + block.originalHeight / 2;
-
-            // Calculate new position keeping the center
-            const newX = centerX - newWidth / 2;
-            const newY = centerY - newHeight / 2;
-
-            // Draw block with fading and size reduction
+            // Draw the fading block
             ctx.save();
-            ctx.globalAlpha = block.time; // Alpha reduces from 1.0 to 0
-
-            // Main color of the block
+            ctx.globalAlpha = block.time;
             ctx.fillStyle = block.color;
-            ctx.beginPath();
-            ctx.rect(newX, newY, newWidth, newHeight);
-            ctx.fill();
-
-            // Reduced 3D effects in size
-            // Create gradient for the fading block
-            const gradientColor = shadeColor(block.color, 20);
-            const gradient = ctx.createLinearGradient(newX, newY, newX, newY + newHeight);
-            gradient.addColorStop(0, gradientColor);
-            gradient.addColorStop(1, block.color);
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.rect(newX, newY, newWidth, newHeight);
-            ctx.fill();
-
-            // Simple border
-            ctx.strokeStyle = shadeColor(block.color, -30);
-            ctx.lineWidth = 1 * scaleFactor;
-            ctx.strokeRect(newX, newY, newWidth, newHeight);
-
+            ctx.fillRect(
+                block.x + (block.originalWidth - newWidth) / 2,
+                block.y + (block.originalHeight - newHeight) / 2,
+                newWidth,
+                newHeight
+            );
             ctx.restore();
         }
     }
@@ -3009,6 +2830,41 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }
             }
+        }
+    }
+
+    // Function to generate animation pattern
+    function generateAnimationPattern() {
+        const pattern = Math.floor(Math.random() * ANIMATION_PATTERNS);
+        const duration = MIN_ANIMATION_DURATION + Math.random() * (MAX_ANIMATION_DURATION - MIN_ANIMATION_DURATION);
+        const intensity = 0.3 + Math.random() * 0.7;
+        
+        return {
+            pattern,
+            duration,
+            intensity,
+            startTime: Date.now()
+        };
+    }
+
+    // Function to calculate animation intensity
+    function calculateAnimationIntensity(block) {
+        const elapsed = Date.now() - block.startTime;
+        const progress = elapsed / block.duration;
+        
+        if (progress >= 1) return 0;
+        
+        switch (block.pattern) {
+            case 0: // Soft pulse
+                return block.intensity * (0.5 + 0.5 * Math.sin(progress * Math.PI * 2)); // Reduced from 4 to 2
+            case 1: // Fade in/out
+                return block.intensity * Math.sin(progress * Math.PI); // No changes, already smooth
+            case 2: // Fast pulse
+                return block.intensity * (0.3 + 0.7 * Math.abs(Math.sin(progress * Math.PI * 4))); // Reduced from 8 to 4
+            case 3: // Wave
+                return block.intensity * (0.5 + 0.5 * Math.sin(progress * Math.PI + block.c * 0.3)); // Reduced from 2 to 1 and adjusted propagation factor
+            default:
+                return 0;
         }
     }
 }); 
