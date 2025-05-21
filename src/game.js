@@ -393,14 +393,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     drawMenu();
                     break;
                 case 3: // Exit Game
-                    if (typeof window.close === 'function') {
-                        window.close();
-                    } else {
-                        if (typeof window.electron !== 'undefined') {
+                    try {
+                        if (window.electron && typeof window.electron.close === 'function') {
                             window.electron.close();
                         } else {
-                            alert('Window cannot be closed automatically. Please close the window manually.');
+                            window.close();
                         }
+                    } catch (error) {
+                        console.error('Error al cerrar la ventana:', error);
+                        window.close();
                     }
                     break;
             }
@@ -1981,12 +1982,20 @@ document.addEventListener('DOMContentLoaded', function () {
         if (e.key === 'Escape') {
             if (!menuActive && !paused) {
                 // We are in the game, return to the menu
-                console.debug("ESC pressed during the game. Returning to the menu...");
                 returnToMenu();
             } else if (menuActive) {
                 // We are in the menu, try to close the window
                 console.debug("ESC pressed in the menu. Trying to close window...");
-                if (typeof window.close === 'function') window.close();
+                try {
+                    if (window.electron && typeof window.electron.close === 'function') {
+                        window.electron.close();
+                    } else {
+                        window.close();
+                    }
+                } catch (error) {
+                    console.error('Error al cerrar la ventana:', error);
+                    window.close();
+                }
             }
         } else if (!menuActive && (e.key === 'p' || e.key === 'P' || e.code === 'Pause')) {
             // Pause - only works during the game

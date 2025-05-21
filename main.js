@@ -6,8 +6,9 @@ function createWindow() {
     width: 800,
     height: 700,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
 
@@ -17,17 +18,6 @@ function createWindow() {
   win.loadFile('index.html');
   // Descomentar la siguiente línea para abrir las herramientas de desarrollo
   // win.webContents.openDevTools();
-
-  // Exponer la función de maximizar al proceso de renderizado
-  win.webContents.on('did-finish-load', () => {
-    win.webContents.executeJavaScript(`
-      window.electron = {
-        maximize: () => {
-          require('electron').ipcRenderer.send('maximize-window');
-        }
-      };
-    `);
-  });
 }
 
 // Manejar la solicitud de maximizar desde el proceso de renderizado
@@ -35,6 +25,14 @@ ipcMain.on('maximize-window', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) {
     win.maximize();
+  }
+});
+
+// Manejar la solicitud de cerrar la ventana
+ipcMain.on('close-window', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    win.close();
   }
 });
 
