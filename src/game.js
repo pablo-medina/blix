@@ -1406,7 +1406,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (currentLevel < levels.length) {
                     console.debug("Level completed. Advancing to level " + currentLevel);
                     loadLevel(currentLevel);
-                    draw();
                 } else {
                     // Game over - Victory
                     showGameOver = true;
