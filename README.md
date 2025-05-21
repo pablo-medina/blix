@@ -22,22 +22,55 @@ A modern breakout game built with vanilla JavaScript and HTML5 Canvas.
 
 ## Controls
 
-- Left arrow: Move paddle to the left
-- Right arrow: Move paddle to the right
-- Up arrow / Space: Launch the ball
-- P key: Pause/Resume game
-- Esc key: Return to main menu
-- Joystick: Move paddle using X-axis
-- + key: Advance to next level (or end game if on last level)
-- - key: Go to previous level (or return to menu if on first level)
-- * key: Restart current level
+### Basic Controls
+- **Left/Right Arrows**: Move paddle left/right
+- **Up Arrow / Space**: Launch the ball
+- **P key**: Pause/Resume game
+- **Esc key**: Return to main menu
+- **Joystick**: Move paddle using X-axis
+
+### Debug Controls
+- **+ key**: Advance to next level (or end game if on last level)
+- **- key**: Go to previous level (or return to menu if on first level)
+- *** key**: Restart current level
+
+## Power-ups
+
+Power-ups appear when breaking blocks and fall down. Catch them with your paddle to activate their effects.
+
+| Symbol | Name | Effect | Duration | Color |
+|--------|------|---------|-----------|--------|
+| E+ | Enlarge | Increases paddle size | 10s | Blue |
+| E- | Shrink | Decreases paddle size | 10s | Blue |
+| S+ | Speed Up | Increases ball speed | 10s | Orange |
+| S- | Slow Down | Decreases ball speed | 10s | Orange |
+| V | Extra Life | Adds one life | Instant | Yellow |
+| B | Barrier | Allows ball to bounce on bottom | 15s | Green |
+| + | Extra Ball | Adds an additional ball | Instant | Green |
+| F | Fire Ball | Ball can destroy blocks without bouncing | 10s | Red |
+| D | Double Size | Doubles ball size | 15s | Purple |
+| L | Laser | Enables laser shots (Space to shoot) | 5s | Pink |
+
+### Power-up Stacking
+- Size (E+/E-) and Speed (S+/S-) power-ups can stack up to 5 times
+- Multiple power-ups of the same type will refresh their duration
+- Some power-ups have visual indicators showing their remaining duration
+
+## Block Types
+
+| Type | Hits Required | Description |
+|------|---------------|-------------|
+| Basic Blocks | 1 | Standard blocks that break in one hit. Come in various colors. |
+| Reinforced Blocks | 2 | Gray blocks that require two hits to break. |
+| Indestructible Blocks | ∞ | Cyan blocks that cannot be destroyed. They can only be passed through with special power-ups. |
 
 ## Features
 
 - Multiple levels with different block patterns
 - Power-ups that change paddle size and ball speed
-- 3D visual effects and animations
 - Background music and sound effects
+- Responsive design that adapts to window size
+- Particle effects and visual feedback
 
 ## Asset Credits
 
