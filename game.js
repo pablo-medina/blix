@@ -1981,13 +1981,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function requestFullscreen() {
-        if (canvas.requestFullscreen) canvas.requestFullscreen();
-        else if (canvas.webkitRequestFullscreen) canvas.webkitRequestFullscreen();
-        else if (canvas.mozRequestFullScreen) canvas.mozRequestFullScreen();
-        else if (canvas.msRequestFullscreen) canvas.msRequestFullscreen();
+        try {
+            // Intentar maximizar la ventana primero
+            if (window.electron) {
+                window.electron.maximize();
+            }
 
-        // After the change, make sure to resize
-        setTimeout(adjustCanvas, 100);
+            // Luego intentar pantalla completa
+            if (canvas.requestFullscreen) {
+                canvas.requestFullscreen();
+            } else if (canvas.webkitRequestFullscreen) {
+                canvas.webkitRequestFullscreen();
+            } else if (canvas.mozRequestFullScreen) {
+                canvas.mozRequestFullScreen();
+            } else if (canvas.msRequestFullscreen) {
+                canvas.msRequestFullscreen();
+            }
+
+            // Ajustar el canvas después de un breve retraso
+            setTimeout(adjustCanvas, 100);
+        } catch (error) {
+            console.debug("Error al intentar maximizar la ventana:", error);
+        }
     }
 
     // Keyboard events for global controls

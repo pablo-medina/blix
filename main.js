@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -11,10 +11,32 @@ function createWindow() {
     }
   });
 
+  // Maximizar la ventana al iniciar
+  win.maximize();
+
   win.loadFile('index.html');
   // Descomentar la siguiente línea para abrir las herramientas de desarrollo
   // win.webContents.openDevTools();
+
+  // Exponer la función de maximizar al proceso de renderizado
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.executeJavaScript(`
+      window.electron = {
+        maximize: () => {
+          require('electron').ipcRenderer.send('maximize-window');
+        }
+      };
+    `);
+  });
 }
+
+// Manejar la solicitud de maximizar desde el proceso de renderizado
+ipcMain.on('maximize-window', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    win.maximize();
+  }
+});
 
 app.whenReady().then(() => {
   createWindow();
