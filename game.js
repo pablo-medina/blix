@@ -972,73 +972,215 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.restore();
     }
 
-    function drawPaddle() {
-        // Paddle with rounded tips and new blue design
-        ctx.save();
-        if (isPaddleDestroyed && Math.floor(paddleDestructionFrames / 4) % 2 === 0) {
-            ctx.globalAlpha = 0.2;
-        }
+    // Add at the top with other game variables
+    let gradientAnimation = 0; // Variable para la animación del gradiente
 
-        // Create gradient for the paddle (blue)
-        const gradient = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x, paddle.y + paddle.height);
+    // Add at the top with other game variables
+    let paddleParticles = []; // Array para las partículas de desintegración del paddle
+    const PADDLE_PARTICLE_COUNT = 30; // Número de partículas para la desintegración
+    const PADDLE_PARTICLE_LIFETIME = 1.0; // Duración de la animación en segundos
+
+    // Función para crear partículas de desintegración del paddle
+    function createPaddleParticles() {
+        paddleParticles = [];
+        const particleSize = paddle.width / PADDLE_PARTICLE_COUNT;
         
-        // Si el láser está activo, usar un gradiente verde
-        if (activePowerUps.laser) {
-            gradient.addColorStop(0, '#00ff00'); // Verde brillante
-            gradient.addColorStop(1, '#00cc00'); // Verde más oscuro
+        for (let i = 0; i < PADDLE_PARTICLE_COUNT; i++) {
+            // Crear partículas distribuidas a lo largo del paddle
+            const x = paddle.x + (i * particleSize);
+            const y = paddle.y + (Math.random() * paddle.height);
             
-            // Efecto de brillo pulsante
-            const pulseIntensity = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() / 100));
-            ctx.shadowColor = 'rgba(0, 255, 0, ' + pulseIntensity + ')';
-            ctx.shadowBlur = 15;
-        } else {
-            gradient.addColorStop(0, '#1976d2'); // Azul oscuro
-            gradient.addColorStop(1, '#64b5f6'); // Azul claro
+            // Crear múltiples partículas por cada posición para más densidad
+            for (let j = 0; j < 3; j++) {
+                paddleParticles.push({
+                    x: x + (Math.random() * particleSize),
+                    y: y,
+                    size: particleSize * (0.5 + Math.random() * 0.5),
+                    speedX: (Math.random() - 0.5) * 8,
+                    speedY: -Math.random() * 8 - 2,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: (Math.random() - 0.5) * 0.2,
+                    life: 1.0,
+                    color: i % 2 === 0 ? '#1976d2' : '#ff0000' // Alternar entre azul y rojo
+                });
+            }
+        }
+    }
+
+    // Función para actualizar y dibujar las partículas del paddle
+    function updateAndDrawPaddleParticles() {
+        for (let i = paddleParticles.length - 1; i >= 0; i--) {
+            const p = paddleParticles[i];
+            
+            // Actualizar posición y rotación
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.rotation += p.rotationSpeed;
+            p.life -= 0.02;
+            p.size *= 0.95;
+
+            if (p.life <= 0) {
+                paddleParticles.splice(i, 1);
+                continue;
+            }
+
+            // Dibujar partícula
+            ctx.save();
+            ctx.globalAlpha = p.life;
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation);
+            
+            // Gradiente para cada partícula
+            const gradient = ctx.createLinearGradient(-p.size/2, -p.size/2, p.size/2, p.size/2);
+            gradient.addColorStop(0, p.color);
+            gradient.addColorStop(1, shadeColor(p.color, -30));
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.rect(-p.size/2, -p.size/2, p.size, p.size);
+            ctx.fill();
+            
+            // Efecto de brillo
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 5;
+            ctx.strokeStyle = shadeColor(p.color, 30);
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+    }
+
+    function drawPaddle() {
+        // Paddle with semicircle tips and new blue design
+        ctx.save();
+        if (isPaddleDestroyed) {
+            if (paddleParticles.length === 0) {
+                createPaddleParticles();
+            }
+            updateAndDrawPaddleParticles();
+            return;
         }
 
-        // Draw the paddle with rounded tips
-        ctx.beginPath();
-        const radius = paddle.height / 2;
-        ctx.moveTo(paddle.x + radius, paddle.y);
-        ctx.lineTo(paddle.x + paddle.width - radius, paddle.y);
-        ctx.quadraticCurveTo(paddle.x + paddle.width, paddle.y, paddle.x + paddle.width, paddle.y + radius);
-        ctx.lineTo(paddle.x + paddle.width, paddle.y + paddle.height - radius);
-        ctx.quadraticCurveTo(paddle.x + paddle.width, paddle.y + paddle.height, paddle.x + paddle.width - radius, paddle.y + paddle.height);
-        ctx.lineTo(paddle.x + radius, paddle.y + paddle.height);
-        ctx.quadraticCurveTo(paddle.x, paddle.y + paddle.height, paddle.x, paddle.y + paddle.height - radius);
-        ctx.lineTo(paddle.x, paddle.y + radius);
-        ctx.quadraticCurveTo(paddle.x, paddle.y, paddle.x + radius, paddle.y);
-        ctx.closePath();
+        // Update gradient animation
+        gradientAnimation += 0.02;
+        const sinValue = Math.sin(gradientAnimation);
+        const cosValue = Math.cos(gradientAnimation);
 
-        // Fill with gradient
+        // Create gradient for the paddle with animation
+        const gradient = ctx.createLinearGradient(
+            paddle.x + sinValue * 20, 
+            paddle.y + cosValue * 10,
+            paddle.x + paddle.width - sinValue * 20,
+            paddle.y + paddle.height - cosValue * 10
+        );
+        
+        // If laser is active, use animated green gradient
+        if (activePowerUps.laser) {
+            const greenIntensity = 0.7 + 0.3 * Math.sin(gradientAnimation * 2);
+            gradient.addColorStop(0, `rgba(0, 255, 0, ${greenIntensity})`);
+            gradient.addColorStop(0.5, `rgba(0, 255, 100, ${greenIntensity})`);
+            gradient.addColorStop(1, `rgba(0, 200, 0, ${greenIntensity})`);
+            
+            // More intense pulsing glow effect
+            const pulseIntensity = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / 100));
+            ctx.shadowColor = `rgba(0, 255, 0, ${pulseIntensity})`;
+            ctx.shadowBlur = 15 + Math.sin(gradientAnimation * 3) * 5;
+        } else {
+            // Animated blue gradient for normal paddle
+            gradient.addColorStop(0, `rgba(25, 118, 210, ${0.8 + 0.2 * sinValue})`);
+            gradient.addColorStop(0.5, `rgba(100, 181, 246, ${0.8 + 0.2 * cosValue})`);
+            gradient.addColorStop(1, `rgba(25, 118, 210, ${0.8 + 0.2 * sinValue})`);
+            
+            // Soft glow effect
+            ctx.shadowColor = 'rgba(25, 118, 210, 0.3)';
+            ctx.shadowBlur = 10 + Math.sin(gradientAnimation * 2) * 5;
+        }
+
+        // Draw paddle with semicircle red tips
+        const tipWidth = paddle.height / 2; // Width of the semicircle tips
+
+        // Draw main paddle body (blue)
+        ctx.beginPath();
+        ctx.moveTo(paddle.x + tipWidth, paddle.y);
+        ctx.lineTo(paddle.x + paddle.width - tipWidth, paddle.y);
+        ctx.lineTo(paddle.x + paddle.width - tipWidth, paddle.y + paddle.height);
+        ctx.lineTo(paddle.x + tipWidth, paddle.y + paddle.height);
+        ctx.closePath();
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // Si el láser está activo, agregar detalles de "cañones"
+        // Draw red tips with yellow glow
+        const redIntensity = 0.8 + 0.2 * Math.sin(gradientAnimation * 2);
+        
+        // Add yellow glow to the tips
+        ctx.shadowColor = 'rgba(255, 255, 200, 0.8)';
+        ctx.shadowBlur = 15;
+        
+        // Left tip
+        ctx.beginPath();
+        ctx.arc(paddle.x + tipWidth, paddle.y + paddle.height/2, tipWidth, Math.PI/2, Math.PI*3/2, false);
+        ctx.fillStyle = `rgba(255, 0, 0, ${redIntensity})`;
+        ctx.fill();
+        
+        // Right tip
+        ctx.beginPath();
+        ctx.arc(paddle.x + paddle.width - tipWidth, paddle.y + paddle.height/2, tipWidth, Math.PI*3/2, Math.PI/2, false);
+        ctx.fillStyle = `rgba(255, 0, 0, ${redIntensity})`;
+        ctx.fill();
+
+        // Reset shadow for borders
+        ctx.shadowBlur = 0;
+        
+        // Add subtle border to tips
+        ctx.strokeStyle = `rgba(255, 0, 0, ${redIntensity * 0.5})`;
+        ctx.lineWidth = 1;
+        
+        // Draw tip borders
+        ctx.beginPath();
+        ctx.arc(paddle.x + tipWidth, paddle.y + paddle.height/2, tipWidth, Math.PI/2, Math.PI*3/2, false);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(paddle.x + paddle.width - tipWidth, paddle.y + paddle.height/2, tipWidth, Math.PI*3/2, Math.PI/2, false);
+        ctx.stroke();
+
+        // If laser is active, add animated "cannon" details
         if (activePowerUps.laser) {
-            // Dibujar cañones en los extremos
+            // Draw animated cannons at the ends
             const cannonWidth = 6;
-            const cannonHeight = 8;
+            const cannonHeight = 8 + Math.sin(gradientAnimation * 3) * 2;
             
-            // Cañón izquierdo
-            ctx.fillStyle = '#00ff00';
+            // Left cannon
+            ctx.fillStyle = `rgba(0, 255, 0, ${0.8 + 0.2 * Math.sin(gradientAnimation * 2)})`;
             ctx.fillRect(paddle.x + paddle.width * 0.25 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
             
-            // Cañón derecho
+            // Right cannon
             ctx.fillRect(paddle.x + paddle.width * 0.75 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
             
-            // Efecto de brillo en los cañones
+            // Cannon glow effect
             ctx.shadowColor = 'rgba(0, 255, 0, 0.8)';
-            ctx.shadowBlur = 10;
-            ctx.strokeStyle = '#00ff00';
+            ctx.shadowBlur = 10 + Math.sin(gradientAnimation * 2) * 5;
+            ctx.strokeStyle = `rgba(0, 255, 0, ${0.8 + 0.2 * Math.sin(gradientAnimation * 2)})`;
             ctx.lineWidth = 2;
             ctx.strokeRect(paddle.x + paddle.width * 0.25 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
             ctx.strokeRect(paddle.x + paddle.width * 0.75 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
         }
 
-        // Add border
-        ctx.strokeStyle = activePowerUps.laser ? '#00ff00' : '#b3e5fc';
-        ctx.lineWidth = 2;
+        // Add very subtle border to main body
+        const borderColor = activePowerUps.laser ? 
+            `rgba(0, 255, 0, ${0.3 + 0.1 * Math.sin(gradientAnimation * 2)})` : 
+            `rgba(179, 229, 252, ${0.2 + 0.1 * Math.sin(gradientAnimation)})`;
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 1;
+        
+        // Draw main body border
+        ctx.beginPath();
+        ctx.moveTo(paddle.x + tipWidth, paddle.y);
+        ctx.lineTo(paddle.x + paddle.width - tipWidth, paddle.y);
+        ctx.lineTo(paddle.x + paddle.width - tipWidth, paddle.y + paddle.height);
+        ctx.lineTo(paddle.x + tipWidth, paddle.y + paddle.height);
+        ctx.closePath();
         ctx.stroke();
 
         ctx.restore();
@@ -1946,25 +2088,33 @@ document.addEventListener('DOMContentLoaded', function () {
                             showGameOver = true;
                             gameOverHandled = false;
                         } else {
-                            // Reset paddle and ball
-                            paddle.x = (canvas.width - paddle.width) / 2;
-                            paddle.width = paddleOriginalWidth;
-                            paddle.height = paddleOriginalHeight;
-                            resetBalls();
-                            waitingToLaunch = true;
-                            if (launchTimeout) clearTimeout(launchTimeout);
-                            launchTimeout = setTimeout(() => {
-                                launchBall();
-                            }, 3000);
-                            backgroundMusic.playbackRate = 1; // Restaurar velocidad normal de la música
-                            activePowerUps = {
-                                sizeStack: 0,
-                                speedStack: 0,
-                                invincible: false,
-                                fireBall: false
-                            };
-                            speedStackTimer = 0;
-                            powerUps = [];
+                            // Iniciar animación de destrucción
+                            isPaddleDestroyed = true;
+                            createPaddleParticles();
+                            
+                            // Esperar a que termine la animación antes de resetear
+                            setTimeout(() => {
+                                isPaddleDestroyed = false;
+                                paddleParticles = [];
+                                paddle.x = (canvas.width - paddle.width) / 2;
+                                paddle.width = paddleOriginalWidth;
+                                paddle.height = paddleOriginalHeight;
+                                resetBalls();
+                                waitingToLaunch = true;
+                                if (launchTimeout) clearTimeout(launchTimeout);
+                                launchTimeout = setTimeout(() => {
+                                    launchBall();
+                                }, 3000);
+                                backgroundMusic.playbackRate = 1;
+                                activePowerUps = {
+                                    sizeStack: 0,
+                                    speedStack: 0,
+                                    invincible: false,
+                                    fireBall: false
+                                };
+                                speedStackTimer = 0;
+                                powerUps = [];
+                            }, PADDLE_PARTICLE_LIFETIME * 1000);
                         }
                     }
                 }
