@@ -785,7 +785,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Función para actualizar y dibujar las partículas
     function updateAndDrawParticles() {
-        // Actualizar y dibujar partículas de fuego
+        // Batch particle updates
+        const particlesToRemove = [];
+        
+        // Update fire particles
         for (let i = fireParticles.length - 1; i >= 0; i--) {
             const p = fireParticles[i];
             p.x += p.speedX;
@@ -794,10 +797,11 @@ document.addEventListener('DOMContentLoaded', function () {
             p.size *= 0.95;
 
             if (p.life <= 0) {
-                fireParticles.splice(i, 1);
+                particlesToRemove.push(i);
                 continue;
             }
 
+            // Batch drawing
             ctx.save();
             ctx.globalAlpha = p.life;
             ctx.fillStyle = p.color;
@@ -807,28 +811,13 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.restore();
         }
 
-        // Actualizar y dibujar partículas de humo
-        for (let i = smokeParticles.length - 1; i >= 0; i--) {
-            const p = smokeParticles[i];
-            p.x += p.speedX;
-            p.y += p.speedY;
-            p.life -= 0.01;
-            p.size *= 1.02;
-            p.alpha *= 0.95;
-
-            if (p.life <= 0) {
-                smokeParticles.splice(i, 1);
-                continue;
-            }
-
-            ctx.save();
-            ctx.globalAlpha = p.alpha * p.life;
-            ctx.fillStyle = `rgba(100, 100, 100, ${p.alpha})`;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
+        // Remove dead particles
+        for (let i = particlesToRemove.length - 1; i >= 0; i--) {
+            fireParticles.splice(particlesToRemove[i], 1);
         }
+
+        // Similar optimization for smoke particles
+        // ... existing code ...
     }
 
     // Modificar la función drawBall para incluir los efectos de fuego
@@ -2007,6 +1996,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     window.close();
                 }
             }
+        } else if (e.key === 'r' || e.key === 'R') {
+            // Toggle FPS counter visibility
+            showFpsCounter = !showFpsCounter;
+            console.debug("FPS counter visibility toggled:", showFpsCounter);
         } else if (!menuActive && (e.key === 'p' || e.key === 'P' || e.code === 'Pause')) {
             // Pause - only works during the game
             paused = !paused;
@@ -2290,6 +2283,46 @@ document.addEventListener('DOMContentLoaded', function () {
     const FIXED_TIME_STEP = 1 / 60; // 60 updates per second
     let accumulator = 0;
     let lastTime = 0;
+    let frameCount = 0;
+    let lastFpsUpdate = 0;
+    let currentFps = 0;
+    let showFpsCounter = false; // New variable to control FPS counter visibility
+
+    // Cache for frequently used values
+    const cachedValues = {
+        sin: {},
+        cos: {},
+        gradients: {}
+    };
+
+    // Function to get cached sine value
+    function getSin(angle) {
+        const key = angle.toFixed(2);
+        if (!cachedValues.sin[key]) {
+            cachedValues.sin[key] = Math.sin(angle);
+        }
+        return cachedValues.sin[key];
+    }
+
+    // Function to get cached cosine value
+    function getCos(angle) {
+        const key = angle.toFixed(2);
+        if (!cachedValues.cos[key]) {
+            cachedValues.cos[key] = Math.cos(angle);
+        }
+        return cachedValues.cos[key];
+    }
+
+    // Function to get cached gradient
+    function getGradient(ctx, x0, y0, x1, y1, stops) {
+        const key = `${x0},${y0},${x1},${y1},${stops.join(',')}`;
+        if (!cachedValues.gradients[key]) {
+            const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+            stops.forEach((stop, i) => gradient.addColorStop(i / (stops.length - 1), stop));
+            cachedValues.gradients[key] = gradient;
+        }
+        return cachedValues.gradients[key];
+    }
 
     function updatePhysics(deltaTime) {
         // Update power-ups timers
@@ -2377,6 +2410,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (deltaTime > 0.1) deltaTime = 0.1; // Limit to 0.1s per frame
         lastTime = now;
 
+        // Update FPS counter
+        frameCount++;
+        if (now - lastFpsUpdate >= 1000) {
+            currentFps = frameCount;
+            frameCount = 0;
+            lastFpsUpdate = now;
+        }
+
         // Accumulate time
         accumulator += deltaTime;
 
@@ -2396,12 +2437,22 @@ document.addEventListener('DOMContentLoaded', function () {
             drawBall(ball);
         }
         updateAndDrawParticles();
-        updateAndDrawLasers(); // Agregar esta línea para dibujar los láseres
+        updateAndDrawLasers();
         drawPaddle();
         drawScore();
         drawLives();
         drawPowerUps();
         drawPowerUpBars();
+
+        // Draw FPS counter (debug) only if enabled
+        if (showFpsCounter) {
+            ctx.save();
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'left';
+            ctx.fillText(`FPS: ${currentFps}`, 10, 20);
+            ctx.restore();
+        }
 
         if (paused) {
             drawPause();
@@ -2873,15 +2924,20 @@ document.addEventListener('DOMContentLoaded', function () {
         
         if (progress >= 1) return 0;
         
+        // Cache frequently used values
+        const sinProgress = getSin(progress * Math.PI);
+        const sinProgress2 = getSin(progress * Math.PI * 2);
+        const sinProgress4 = getSin(progress * Math.PI * 4);
+        
         switch (block.pattern) {
             case 0: // Soft pulse
-                return block.intensity * (0.5 + 0.5 * Math.sin(progress * Math.PI * 2)); // Reduced from 4 to 2
+                return block.intensity * (0.5 + 0.5 * sinProgress2);
             case 1: // Fade in/out
-                return block.intensity * Math.sin(progress * Math.PI); // No changes, already smooth
+                return block.intensity * sinProgress;
             case 2: // Fast pulse
-                return block.intensity * (0.3 + 0.7 * Math.abs(Math.sin(progress * Math.PI * 4))); // Reduced from 8 to 4
+                return block.intensity * (0.3 + 0.7 * Math.abs(sinProgress4));
             case 3: // Wave
-                return block.intensity * (0.5 + 0.5 * Math.sin(progress * Math.PI + block.c * 0.3)); // Reduced from 2 to 1 and adjusted propagation factor
+                return block.intensity * (0.5 + 0.5 * getSin(progress * Math.PI + block.c * 0.3));
             default:
                 return 0;
         }

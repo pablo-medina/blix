@@ -46,6 +46,7 @@ A modern breakout game built with vanilla JavaScript and HTML5 Canvas.
 - **+ key**: Advance to next level (or end game if on last level)
 - **- key**: Go to previous level (or return to menu if on first level)
 - *** key**: Restart current level
+- **R key**: Toggle FPS counter visibility
 
 ## Power-ups
 
