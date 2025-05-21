@@ -252,7 +252,8 @@ document.addEventListener('DOMContentLoaded', function () {
         speedStack: 0, // -5 to +5
         invincible: false, // New power-up that allows bouncing on the bottom
         fireBall: false, // New power-up for fire balls
-        doubleSize: false // New power-up that quadruples ball size
+        doubleSize: false, // New power-up that quadruples ball size
+        laser: false // New power-up for laser shots
     };
     let speedStackTimer = 0;
 
@@ -283,14 +284,16 @@ document.addEventListener('DOMContentLoaded', function () {
         speedStack: 0,
         invincible: 0,
         fireBall: 0, // Timer for fire power-up
-        doubleSize: 0 // Timer for double size power-up
+        doubleSize: 0, // Timer for double size power-up
+        laser: 0 // Timer for laser power-up
     };
     let powerUpBarAlpha = {
         sizeStack: 0,
         speedStack: 0,
         invincible: 0,
         fireBall: 0, // Alpha for fire bar
-        doubleSize: 0 // Alpha for double size bar
+        doubleSize: 0, // Alpha for double size bar
+        laser: 0 // Alpha for laser bar
     };
 
     // Game variables
@@ -313,6 +316,18 @@ document.addEventListener('DOMContentLoaded', function () {
             rightPressed = true;
         } else if (e.key === 'Left' || e.key === 'ArrowLeft') {
             leftPressed = true;
+        } else if (e.key === ' ' && activePowerUps.laser) { // Space to shoot
+            const now = Date.now();
+            if (now - lastLaserShot >= LASER_COOLDOWN) {
+                // Create two laser shots from the paddle
+                laserShots.push(createLaserShot(paddle.x + paddle.width * 0.25, paddle.y));
+                laserShots.push(createLaserShot(paddle.x + paddle.width * 0.75, paddle.y));
+                lastLaserShot = now;
+                
+                // Play shooting sound
+                audioBounce.currentTime = 0;
+                audioBounce.play();
+            }
         }
     }
 
@@ -541,9 +556,10 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'S-', color: '#ff9800' }, // Slower ball
         { type: 'V', color: '#ffd600' },   // Extra life
         { type: 'B', color: '#4caf50' },   // Barrier (bottom bounce)
-        { type: '+', color: '#e91e63' },   // Extra ball
+        { type: '+', color: '#00ff00' },   // Extra ball (ahora verde)
         { type: 'F', color: '#ff4500' },   // Fire ball
-        { type: 'D', color: '#9c27b0' }    // Double size ball
+        { type: 'D', color: '#9c27b0' },   // Double size ball
+        { type: 'L', color: '#e91e63' }    // Laser power-up (ahora rosa)
     ];
 
     let powerUps = [];
@@ -747,6 +763,10 @@ document.addEventListener('DOMContentLoaded', function () {
             case 'D':
                 activePowerUps.doubleSize = true;
                 powerUpTimers.doubleSize = DOUBLE_SIZE_DURATION;
+                break;
+            case 'L':
+                activePowerUps.laser = true;
+                powerUpTimers.laser = LASER_DURATION;
                 break;
         }
         applyStackedPowerUps();
@@ -961,8 +981,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Create gradient for the paddle (blue)
         const gradient = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x, paddle.y + paddle.height);
-        gradient.addColorStop(0, '#1976d2'); // Azul oscuro
-        gradient.addColorStop(1, '#64b5f6'); // Azul claro
+        
+        // Si el láser está activo, usar un gradiente verde
+        if (activePowerUps.laser) {
+            gradient.addColorStop(0, '#00ff00'); // Verde brillante
+            gradient.addColorStop(1, '#00cc00'); // Verde más oscuro
+            
+            // Efecto de brillo pulsante
+            const pulseIntensity = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() / 100));
+            ctx.shadowColor = 'rgba(0, 255, 0, ' + pulseIntensity + ')';
+            ctx.shadowBlur = 15;
+        } else {
+            gradient.addColorStop(0, '#1976d2'); // Azul oscuro
+            gradient.addColorStop(1, '#64b5f6'); // Azul claro
+        }
 
         // Draw the paddle with rounded tips
         ctx.beginPath();
@@ -978,12 +1010,34 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.quadraticCurveTo(paddle.x, paddle.y, paddle.x + radius, paddle.y);
         ctx.closePath();
 
-        // Fill with blue gradient
+        // Fill with gradient
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // Add blue border
-        ctx.strokeStyle = '#b3e5fc';
+        // Si el láser está activo, agregar detalles de "cañones"
+        if (activePowerUps.laser) {
+            // Dibujar cañones en los extremos
+            const cannonWidth = 6;
+            const cannonHeight = 8;
+            
+            // Cañón izquierdo
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(paddle.x + paddle.width * 0.25 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
+            
+            // Cañón derecho
+            ctx.fillRect(paddle.x + paddle.width * 0.75 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
+            
+            // Efecto de brillo en los cañones
+            ctx.shadowColor = 'rgba(0, 255, 0, 0.8)';
+            ctx.shadowBlur = 10;
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(paddle.x + paddle.width * 0.25 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
+            ctx.strokeRect(paddle.x + paddle.width * 0.75 - cannonWidth/2, paddle.y - cannonHeight, cannonWidth, cannonHeight);
+        }
+
+        // Add border
+        ctx.strokeStyle = activePowerUps.laser ? '#00ff00' : '#b3e5fc';
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -1719,6 +1773,16 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        if (activePowerUps.laser || powerUpBarAlpha.laser > 0.01) {
+            activeBars.push({
+                type: 'Laser',
+                timer: powerUpTimers.laser,
+                alpha: powerUpBarAlpha.laser,
+                color: '#e91e63', // Cambiado a rosa
+                active: activePowerUps.laser
+            });
+        }
+
         // Draw from the top down
         for (let i = 0; i < activeBars.length; i++) {
             const bar = activeBars[i];
@@ -1734,6 +1798,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (bar.type === 'Barrier') powerUpBarAlpha.invincible = bar.alpha;
                 else if (bar.type === 'Fire') powerUpBarAlpha.fireBall = bar.alpha;
                 else if (bar.type === 'Double') powerUpBarAlpha.doubleSize = bar.alpha;
+                else if (bar.type === 'Laser') powerUpBarAlpha.laser = bar.alpha;
             } else if (!bar.active && bar.alpha > 0) {
                 bar.alpha -= 0.05;
                 if (bar.alpha < 0) bar.alpha = 0;
@@ -1744,6 +1809,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (bar.type === 'Barrier') powerUpBarAlpha.invincible = bar.alpha;
                 else if (bar.type === 'Fire') powerUpBarAlpha.fireBall = bar.alpha;
                 else if (bar.type === 'Double') powerUpBarAlpha.doubleSize = bar.alpha;
+                else if (bar.type === 'Laser') powerUpBarAlpha.laser = bar.alpha;
             }
 
             // Y position (from top to bottom)
@@ -1756,12 +1822,22 @@ document.addEventListener('DOMContentLoaded', function () {
             let maxDuration = POWERUP_DURATION;
             if (bar.type === 'Barrier') maxDuration = INVINCIBLE_DURATION;
             else if (bar.type === 'Double') maxDuration = DOUBLE_SIZE_DURATION;
+            else if (bar.type === 'Laser') maxDuration = LASER_DURATION;
+
+            // Dibujar la barra con efecto de brillo si es el láser
+            if (bar.type === 'Laser' && bar.active) {
+                ctx.shadowColor = 'rgba(233, 30, 99, 0.5)'; // Cambiado a rosa
+                ctx.shadowBlur = 10;
+            }
 
             ctx.fillRect(x, barY, barW * (bar.timer / maxDuration), barH);
             ctx.strokeStyle = '#222';
             ctx.strokeRect(x, barY, barW, barH);
             ctx.fillStyle = '#fff';
             ctx.fillText(bar.type, x + 5, barY + barH - 2);
+
+            // Resetear efectos de brillo
+            ctx.shadowBlur = 0;
         }
 
         ctx.globalAlpha = 1;
@@ -2247,6 +2323,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 bottomBorderBlink = false;
             }
         }
+        if (activePowerUps.laser) {
+            powerUpTimers.laser -= deltaTime;
+            if (powerUpTimers.laser <= 0) {
+                activePowerUps.laser = false;
+                powerUpBarAlpha.laser = 0;
+                laserShots = []; // Limpiar todos los láseres activos
+            }
+        }
 
         // Update paddle position
         if (!isPaddleDestroyed) {
@@ -2306,7 +2390,8 @@ document.addEventListener('DOMContentLoaded', function () {
         for (let ball of balls) {
             drawBall(ball);
         }
-        updateAndDrawParticles(); // Agregar esta línea después de dibujar las bolas
+        updateAndDrawParticles();
+        updateAndDrawLasers(); // Agregar esta línea para dibujar los láseres
         drawPaddle();
         drawScore();
         drawLives();
@@ -2643,5 +2728,122 @@ document.addEventListener('DOMContentLoaded', function () {
         launchTimeout = setTimeout(launchBall, 3000);
 
         console.debug('Level loaded with ' + bricks.flat().filter(b => b.status === 1 && !b.indestructible).length + ' active destructible blocks');
+    }
+
+    // Variables para el power-up de láser
+    let laserShots = [];
+    const LASER_SPEED = 12;
+    const LASER_WIDTH = 4;
+    const LASER_HEIGHT = 20;
+    const LASER_COOLDOWN = 200; // ms between shots
+    let lastLaserShot = 0;
+    const LASER_DURATION = 5; // seconds of power-up duration
+
+    // Function to create a laser shot
+    function createLaserShot(x, y) {
+        return {
+            x: x,
+            y: y,
+            width: LASER_WIDTH,
+            height: LASER_HEIGHT,
+            speed: LASER_SPEED
+        };
+    }
+
+    // Function to update and draw laser shots
+    function updateAndDrawLasers() {
+        for (let i = laserShots.length - 1; i >= 0; i--) {
+            const laser = laserShots[i];
+            
+            // Move laser upwards
+            laser.y -= laser.speed;
+            
+            // Remove if it exits the screen
+            if (laser.y + laser.height < gameBorder.top) {
+                laserShots.splice(i, 1);
+                continue;
+            }
+            
+            // Draw laser with visual effects
+            ctx.save();
+            
+            // Gradient for the laser
+            const gradient = ctx.createLinearGradient(laser.x, laser.y, laser.x, laser.y + laser.height);
+            gradient.addColorStop(0, 'rgba(233, 30, 99, 0.8)'); // Pink
+            gradient.addColorStop(0.5, 'rgba(233, 30, 99, 1)'); // Pink
+            gradient.addColorStop(1, 'rgba(233, 30, 99, 0.8)'); // Pink
+            
+            // Glow effect
+            ctx.shadowColor = 'rgba(233, 30, 99, 0.5)'; // Pink
+            ctx.shadowBlur = 10;
+            
+            // Draw the laser
+            ctx.fillStyle = gradient;
+            ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+            
+            // Glow effect
+            ctx.strokeStyle = 'rgba(233, 30, 99, 0.3)'; // Pink
+            ctx.lineWidth = 2;
+            ctx.strokeRect(laser.x - 1, laser.y, laser.width + 2, laser.height);
+            
+            ctx.restore();
+            
+            // Check collisions with blocks
+            for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
+                for (let r = 0; r < BRICK_ROW_COUNT; r++) {
+                    const brick = bricks[c][r];
+                    if (brick.status === 1) { // Check all active blocks
+                        if (laser.x < brick.x + BRICK_WIDTH &&
+                            laser.x + laser.width > brick.x &&
+                            laser.y < brick.y + BRICK_HEIGHT &&
+                            laser.y + laser.height > brick.y) {
+                            
+                            // If block is indestructible, just remove the laser
+                            if (brick.indestructible) {
+                                laserShots.splice(i, 1);
+                                break;
+                            }
+                            
+                            // If not indestructible, destroy the block
+                            brick.status = 0;
+                            score++;
+                            audioBrick.currentTime = 0;
+                            audioBrick.play();
+                            createBrickExplosion(brick);
+                            spawnPowerUp(brick.x + BRICK_WIDTH / 2 - 14, brick.y + BRICK_HEIGHT / 2 - 14);
+                            
+                            // Remove the laser
+                            laserShots.splice(i, 1);
+
+                            // Check if level is completed
+                            const destructiblesRestantes = bricks.flat().filter(b => !b.indestructible && b.status === 1).length;
+                            if (destructiblesRestantes === 0 && !showLevelMessage) {
+                                showLevelMessage = true;
+                                if (transitionTimeout) clearTimeout(transitionTimeout);
+                                transitionTimeout = setTimeout(() => {
+                                    showLevelMessage = false;
+                                    currentLevel++;
+                                    if (currentLevel < levels.length) {
+                                        console.debug("Level completed. Advancing to level " + currentLevel);
+                                        loadLevel(currentLevel);
+                                        draw();
+                                    } else {
+                                        // Game over - Victory
+                                        showGameOver = true;
+                                        if (transitionTimeout) clearTimeout(transitionTimeout);
+                                        transitionTimeout = setTimeout(() => {
+                                            showGameOver = false;
+                                            returnToMenu();
+                                        }, 5000);
+                                    }
+                                }, 1500);
+                            }
+                            
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 }); 
