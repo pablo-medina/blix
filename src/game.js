@@ -23,6 +23,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const DOUBLE_SIZE_DURATION = 15; // seconds for double size power-up
     const PANEL_PADDING = 16;
 
+    // Enemy configuration
+    const ENEMY_TYPES = [
+        { shape: 'circle', color: '#ff0000', size: 20, pattern: 'zigzag', speed: 2 },
+        { shape: 'triangle', color: '#00ff00', size: 25, pattern: 'wave', speed: 1.5 },
+        { shape: 'square', color: '#0000ff', size: 22, pattern: 'straight', speed: 3 },
+        { shape: 'hexagon', color: '#ffff00', size: 24, pattern: 'circular', speed: 1.8 }
+    ];
+    let enemies = [];
+    let enemySpawnTimer = 0;
+    let enemySpawnDelay = 3; // Initial spawn delay in seconds
+    let lastEnemyDestroyedTime = 0;
+    const MAX_ENEMIES = 2;
+    const ENEMY_DESTROY_DURATION = 0.5; // Duration of destroy animation in seconds
+
     // Basic canvas configuration
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -316,7 +330,7 @@ document.addEventListener('DOMContentLoaded', function () {
             rightPressed = true;
         } else if (e.key === 'Left' || e.key === 'ArrowLeft') {
             leftPressed = true;
-        } else if (e.key === ' ' && activePowerUps.laser) { // Space to shoot
+        } else if (e.key === ' ' && activePowerUps.laser && !paused && !showLevelMessage && !showGameOver) { // Space to shoot
             const now = Date.now();
             if (now - lastLaserShot >= LASER_COOLDOWN) {
                 // Create two laser shots from the paddle
@@ -1896,13 +1910,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     ball.y = paddle.y - currentRadius;
 
                     // Calcular la posición relativa de impacto (0 a 1)
-                    const relativeIntersectX = (ball.x - paddle.x) / paddle.width;
+                    // Ajustar el cálculo para tener en cuenta el radio actual de la bola
+                    const relativeIntersectX = (ball.x - (paddle.x + paddle.width/2)) / (paddle.width/2);
+                    const normalizedPosition = Math.max(-1, Math.min(1, relativeIntersectX));
 
                     // Calcular la velocidad del paddle en el momento del impacto
                     const paddleSpeed = rightPressed ? paddle.speed : (leftPressed ? -paddle.speed : 0);
 
                     // Calcular el ángulo base de rebote (más pronunciado en los extremos)
-                    const normalizedPosition = relativeIntersectX * 2 - 1; // Convertir a rango -1 a 1
                     const angleFactor = Math.sign(normalizedPosition) * Math.pow(Math.abs(normalizedPosition), 1.5);
                     const maxBounceAngle = Math.PI / 3; // 60 grados máximo
                     const minBounceAngle = Math.PI / 6; // 30 grados mínimo
@@ -1946,6 +1961,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
                         ball.dx = speed * Math.cos(newAngle);
                         ball.dy = speed * Math.sin(newAngle);
+                    }
+
+                    // Asegurar que la componente vertical sea siempre negativa (hacia arriba)
+                    if (ball.dy > 0) {
+                        ball.dy = -ball.dy;
                     }
 
                     audioBounce.currentTime = 0;
@@ -2329,6 +2349,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updatePhysics(deltaTime) {
+        // Si el nivel está completo, no actualizar nada
+        if (showLevelMessage) {
+            return;
+        }
+
         // Update power-ups timers
         if (activePowerUps.sizeStack !== 0) {
             powerUpTimers.sizeStack -= deltaTime;
@@ -2399,6 +2424,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Update power-up rotation
         powerUpAngle += 0.05;
+
+        // Enemy updates
+        updateEnemies(deltaTime);
+        checkEnemyCollisions();
     }
 
     function draw() {
@@ -2439,6 +2468,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Draw game state
             drawBricks();
             drawGameBorders();
+            drawEnemies();
             for (let ball of balls) {
                 drawBall(ball);
             }
@@ -2710,6 +2740,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // Reset complete game state
         resetGameState();
 
+        // Reset enemy system
+        enemies = [];
+        enemySpawnTimer = 0;
+        lastEnemyDestroyedTime = 0;
+
         // Load new level
         bricks = [];
         const asciiLevel = levels[levelIdx].map(row => row.padEnd(BRICK_COLUMN_COUNT, ' '));
@@ -2908,6 +2943,264 @@ document.addEventListener('DOMContentLoaded', function () {
                 return block.intensity * (0.5 + 0.5 * getSin(progress * Math.PI + block.c * 0.3));
             default:
                 return 0;
+        }
+    }
+
+    // Function to create a new enemy
+    function createEnemy() {
+        const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+        const x = Math.random() * (gameBorder.right - gameBorder.left - 2 * type.size) + gameBorder.left + type.size;
+        const y = -type.size;
+        const angle = Math.random() * Math.PI * 2;
+        return {
+            x,
+            y,
+            type,
+            angle,
+            rotationSpeed: (Math.random() - 0.5) * 0.1,
+            pattern: type.pattern,
+            speed: type.speed,
+            patternTime: 0,
+            isDestroying: false,
+            destroyTime: 0,
+            originalSize: type.size,
+            targetBall: null,
+            targetTime: 0
+        };
+    }
+
+    // Function to update enemy positions and patterns
+    function updateEnemies(deltaTime) {
+        // Clear enemies when level is completed
+        if (showLevelMessage) {
+            enemies = [];
+            return;
+        }
+
+        // Spawn initial enemies after 3 seconds
+        if (enemySpawnTimer === 0 && !menuActive && !paused && !showLevelMessage && !showGameOver) {
+            enemySpawnTimer = 3; // Start with 3 seconds delay
+        }
+
+        // Update spawn timer
+        if (enemySpawnTimer > 0) {
+            enemySpawnTimer -= deltaTime;
+            if (enemySpawnTimer <= 0 && enemies.length < MAX_ENEMIES) {
+                enemies.push(createEnemy());
+                // Si es el primer spawn después de iniciar el nivel, mantener el spawn rápido
+                if (enemies.length === 1) {
+                    enemySpawnTimer = 2; // Spawn rápido para el segundo enemigo inicial
+                } else {
+                    enemySpawnTimer = 5 + Math.random() * 5; // 5-10 segundos para spawns posteriores
+                }
+            }
+        }
+
+        // Update existing enemies
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            
+            // Handle enemy destruction
+            if (enemy.isDestroying) {
+                enemy.destroyTime += deltaTime;
+                if (enemy.destroyTime >= ENEMY_DESTROY_DURATION) {
+                    enemies.splice(i, 1);
+                    continue;
+                }
+            }
+
+            enemy.patternTime += deltaTime;
+            enemy.angle += enemy.rotationSpeed;
+
+            // Update target ball tracking
+            if (enemy.targetBall) {
+                enemy.targetTime += deltaTime;
+                if (enemy.targetTime >= 2) { // Change target every 2 seconds
+                    enemy.targetBall = null;
+                    enemy.targetTime = 0;
+                }
+            } else if (Math.random() < 0.01) { // 1% chance each frame to target a ball
+                const availableBalls = balls.filter(ball => !ball.onPad);
+                if (availableBalls.length > 0) {
+                    enemy.targetBall = availableBalls[Math.floor(Math.random() * availableBalls.length)];
+                    enemy.targetTime = 0;
+                }
+            }
+
+            // Calculate movement
+            let dx = 0;
+            let dy = 0;
+
+            // Base movement pattern
+            switch (enemy.pattern) {
+                case 'zigzag':
+                    dx = Math.sin(enemy.patternTime * 3) * enemy.speed;
+                    dy = enemy.speed;
+                    break;
+                case 'wave':
+                    dx = Math.sin(enemy.patternTime * 2) * enemy.speed;
+                    dy = enemy.speed * 0.5;
+                    break;
+                case 'straight':
+                    dy = enemy.speed;
+                    break;
+                case 'circular':
+                    dx = Math.cos(enemy.patternTime) * enemy.speed;
+                    dy = Math.sin(enemy.patternTime) * enemy.speed;
+                    break;
+            }
+
+            // Add ball tracking if there's a target
+            if (enemy.targetBall && !enemy.isDestroying) {
+                const targetDx = enemy.targetBall.x - enemy.x;
+                const targetDy = enemy.targetBall.y - enemy.y;
+                const dist = Math.sqrt(targetDx * targetDx + targetDy * targetDy);
+                if (dist > 0) {
+                    dx += (targetDx / dist) * enemy.speed * 0.5;
+                    dy += (targetDy / dist) * enemy.speed * 0.5;
+                }
+            }
+
+            // Update position
+            enemy.x += dx;
+            enemy.y += dy;
+
+            // Keep enemies within game boundaries
+            if (enemy.x - enemy.type.size < gameBorder.left) {
+                enemy.x = gameBorder.left + enemy.type.size;
+                enemy.patternTime = 0;
+            } else if (enemy.x + enemy.type.size > gameBorder.right) {
+                enemy.x = gameBorder.right - enemy.type.size;
+                enemy.patternTime = 0;
+            }
+
+            if (enemy.y - enemy.type.size < gameBorder.top) {
+                enemy.y = gameBorder.top + enemy.type.size;
+            } else if (enemy.y + enemy.type.size > gameBorder.bottom) {
+                enemy.y = gameBorder.bottom - enemy.type.size;
+                enemy.patternTime = 0;
+            }
+        }
+    }
+
+    // Function to draw enemies
+    function drawEnemies() {
+        for (const enemy of enemies) {
+            ctx.save();
+            ctx.translate(enemy.x, enemy.y);
+            ctx.rotate(enemy.angle);
+
+            // Calculate size and alpha for destroying enemies
+            let size = enemy.type.size;
+            let alpha = 1;
+            if (enemy.isDestroying) {
+                const progress = enemy.destroyTime / ENEMY_DESTROY_DURATION;
+                size = enemy.originalSize * (1 - progress);
+                alpha = 1 - progress;
+            }
+
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = enemy.type.color;
+            ctx.shadowColor = enemy.type.color;
+            ctx.shadowBlur = 10;
+
+            switch (enemy.type.shape) {
+                case 'circle':
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'triangle':
+                    ctx.beginPath();
+                    ctx.moveTo(0, -size);
+                    ctx.lineTo(size, size);
+                    ctx.lineTo(-size, size);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                case 'square':
+                    ctx.fillRect(-size, -size, size * 2, size * 2);
+                    break;
+                case 'hexagon':
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i * Math.PI) / 3;
+                        const x = Math.cos(angle) * size;
+                        const y = Math.sin(angle) * size;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+            }
+            ctx.restore();
+        }
+    }
+
+    // Function to check collisions with enemies
+    function checkEnemyCollisions() {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            if (enemy.isDestroying) continue;
+
+            for (let ball of balls) {
+                const dx = ball.x - enemy.x;
+                const dy = ball.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < ball.radius + enemy.type.size) {
+                    // Destruir enemigo si la bola es grande (con o sin fuego)
+                    if (activePowerUps.doubleSize) {
+                        enemy.isDestroying = true;
+                        enemy.destroyTime = 0;
+                        audioBrick.currentTime = 0;
+                        audioBrick.play();
+                        score += 10;
+                        // Iniciar el timer para el siguiente enemigo
+                        if (enemySpawnTimer <= 0) {
+                            enemySpawnTimer = 5 + Math.random() * 5; // 5-10 segundos
+                        }
+                    }
+                    // En cualquier caso, hacer rebotar la bola
+                    const angle = Math.atan2(dy, dx);
+                    ball.dx = Math.cos(angle) * ball.baseSpeed;
+                    ball.dy = Math.sin(angle) * ball.baseSpeed;
+                    return;
+                }
+            }
+
+            // Check collision with paddle
+            if (enemy.y + enemy.type.size > paddle.y && enemy.y - enemy.type.size < paddle.y + paddle.height &&
+                enemy.x + enemy.type.size > paddle.x && enemy.x - enemy.type.size < paddle.x + paddle.width) {
+                enemy.isDestroying = true;
+                enemy.destroyTime = 0;
+                audioBrick.currentTime = 0;
+                audioBrick.play();
+                score += 10;
+                // Iniciar el timer para el siguiente enemigo
+                if (enemySpawnTimer <= 0) {
+                    enemySpawnTimer = 5 + Math.random() * 5; // 5-10 segundos
+                }
+            }
+
+            // Check collision with laser
+            for (let j = laserShots.length - 1; j >= 0; j--) {
+                const laser = laserShots[j];
+                if (laser.x < enemy.x + enemy.type.size && laser.x + laser.width > enemy.x - enemy.type.size &&
+                    laser.y < enemy.y + enemy.type.size && laser.y + laser.height > enemy.y - enemy.type.size) {
+                    enemy.isDestroying = true;
+                    enemy.destroyTime = 0;
+                    laserShots.splice(j, 1);
+                    audioBrick.currentTime = 0;
+                    audioBrick.play();
+                    score += 10;
+                    // Iniciar el timer para el siguiente enemigo
+                    if (enemySpawnTimer <= 0) {
+                        enemySpawnTimer = 5 + Math.random() * 5; // 5-10 segundos
+                    }
+                    break;
+                }
+            }
         }
     }
 }); 
