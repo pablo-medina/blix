@@ -142,19 +142,107 @@ document.addEventListener('DOMContentLoaded', function () {
             '               ',
             '               ',
             '               '
+        ],        
+        [
+            '               ',
+            '               ',
+            '      W        ',
+            '     W W       ',
+            '    Y   Y      ',
+            '   R     R     ',
+            '  G       G    ',
+            ' O         O   ',
+            'P           P  ',
+            ' O         O   ',
+            '  G       G    ',
+            '   R     R     ',
+            '    Y   Y      ',
+            '     W W       ',
+            '      W        ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
+        ], 
+        [
+            '               ',
+            '               ',
+            '   2 2 2 2 2   ',
+            '   W W W W W   ',
+            '   Y Y Y Y Y   ',
+            '   R R R R R   ',
+            '   G G G G G   ',
+            '   O O O O O   ',
+            '   P P P P P   ',
+            '   O O O O O   ',
+            '   G G G G G   ',
+            '   R R R R R   ',
+            '   Y Y Y Y Y   ',
+            '   W W W W W   ',
+            '   2 2 2 2 2   ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
+        ], 
+        [
+            '               ',
+            '               ',
+            '   PPPPPPPPP   ',
+            '   P       P   ',
+            '   P  O O  P   ',
+            '   P O   O P   ',
+            '   P O   O P   ',
+            '   P  O O  P   ',
+            '   P       P   ',
+            '   PPPPPPPPP   ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
+        ], 
+        [
+            '               ',
+            '               ',
+            '   222222222   ',
+            '   2       2   ',
+            '   2 WWWWW 2   ',
+            '   2 W   W 2   ',
+            '   2 W   W 2   ',
+            '   2 WWWWW 2   ',
+            '   2       2   ',
+            '   222222222   ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
         ],
         [
             '               ',
             '               ',
-            '               ',
-            '               ',
-            '2222  222  2222', // Gray
-            'W  W  WWW  W  W', // White
-            'Y  Y  YYY  Y  Y', // Yellow
-            'R  R  RRR  R  R', // Red
-            'G  G  GGG  G  G', // Green
-            'O  O  OOO  O  O', // Orange
-            'PPPP  PPP  PPPP', // Purple
+            '   GGGGGGGGG   ',
+            '  G         G  ',
+            ' G  OOO OOO  G ',
+            ' G O   O   O G ',
+            ' G O O O O O G ',
+            ' G O   O   O G ',
+            ' G  OOO OOO  G ',
+            '  G         G  ',
+            '   GGGGGGGGG   ',
             '               ',
             '               ',
             '               ',
@@ -187,6 +275,28 @@ document.addEventListener('DOMContentLoaded', function () {
             '               ',
             '               '
         ],
+        [
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '2222  222  2222', // Gray
+            'W  W  WWW  W  W', // White
+            'Y  Y  YYY  Y  Y', // Yellow
+            'R  R  RRR  R  R', // Red
+            'G  G  GGG  G  G', // Green
+            'O  O  OOO  O  O', // Orange
+            'PPPP  PPP  PPPP', // Purple
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               ',
+            '               '
+        ],        
         [
             '               ',
             '               ',
