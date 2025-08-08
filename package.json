@@ -2,21 +2,28 @@
   "name": "blix-game",
   "version": "1.0.0",
   "description": "Un juego estilo Brix hecho con Electron",
-  "main": "main.js",
+  "main": "dist/electron/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run build:web && npm run build:main && npx electron .",
+    "dev": "npm run build:web && npm run build:main && npx electron .",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "electron-builder build --win --publish never",
-    "build:win": "electron-builder build --win --publish never",
-    "build:mac": "electron-builder build --mac --publish never",
-    "build:linux": "electron-builder build --linux --publish never",
+    "build": "npm run build:web && npm run build:main && electron-builder build --win --publish never",
+    "build:win": "npm run build:web && npm run build:main && electron-builder build --win --publish never",
+    "build:mac": "npm run build:web && npm run build:main && electron-builder build --mac --publish never",
+    "build:linux": "npm run build:web && npm run build:main && electron-builder build --linux --publish never",
     "build:web": "webpack --mode production",
-    "start:web": "node scripts/start-web.js"
+    "build:main": "tsc -p tsconfig.electron.json",
+    "start:web": "node scripts/start-web.js",
+    "android:sync": "npx cap sync android",
+    "android:add": "npx cap add android",
+    "build:android": "npm run build:web && npx cap copy android && cd android && gradlew.bat assembleDebug"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "electron": "^28.1.0"
+    "electron": "^28.1.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/android": "^6.0.0"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^13.0.0",
@@ -25,6 +32,12 @@
     "html-webpack-plugin": "^5.5.3",
     "open": "^10.1.2",
     "style-loader": "^3.3.3",
+    "ts-loader": "^9.5.1",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.4",
+    "@types/node": "^22.5.0",
+    "@types/electron": "^1.6.12",
+    "@capacitor/cli": "^6.0.0",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
   },
@@ -34,6 +47,12 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "dist/electron/**/*",
+      "dist/web/**/*",
+      "sounds/**/*",
+      "package.json"
+    ],
     "win": {
       "target": "nsis"
     },

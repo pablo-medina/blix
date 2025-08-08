@@ -1,7 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
+import { app, BrowserWindow, ipcMain } from 'electron';
+import path from 'path';
 
-function createWindow() {
+function createWindow(): void {
   const win = new BrowserWindow({
     width: 800,
     height: 700,
@@ -12,28 +12,21 @@ function createWindow() {
     }
   });
 
-  // Maximizar la ventana al iniciar
   win.maximize();
 
-  win.loadFile('index.html');
-  // Descomentar la siguiente línea para abrir las herramientas de desarrollo
-  // win.webContents.openDevTools();
+  // Cargar la build web dentro de Electron
+  const indexPath = path.resolve(__dirname, '..', 'web', 'index.html');
+  win.loadFile(indexPath);
 }
 
-// Manejar la solicitud de maximizar desde el proceso de renderizado
 ipcMain.on('maximize-window', () => {
   const win = BrowserWindow.getFocusedWindow();
-  if (win) {
-    win.maximize();
-  }
+  if (win) win.maximize();
 });
 
-// Manejar la solicitud de cerrar la ventana
 ipcMain.on('close-window', () => {
   const win = BrowserWindow.getFocusedWindow();
-  if (win) {
-    win.close();
-  }
+  if (win) win.close();
 });
 
 app.whenReady().then(() => {
@@ -50,4 +43,5 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
-}); 
+});
+

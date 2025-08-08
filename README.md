@@ -16,15 +16,14 @@ A modern breakout game built with vanilla JavaScript and HTML5 Canvas.
 ## Available Scripts
 
 ### Development
-- `yarn start`: Launches the game in development mode using Electron
-- `yarn start:web`: Builds and opens the web version in your default browser
+- `npm run start`: Launches game in Electron mode
+- `npm run start:web`: Launches game in Web mode
 
-### Build Scripts
-- `yarn build`: Builds the game for all platforms (Windows, macOS, Linux)
-- `yarn build:win`: Builds the game for Windows
-- `yarn build:mac`: Builds the game for macOS
-- `yarn build:linux`: Builds the game for Linux
-- `yarn build:web`: Builds the web version of the game
+### Builds
+- `npm run build`: Web + Electron para Windows por defecto
+- `npm run build:win|mac|linux`: Build por plataforma
+- `npm run build:web`: Solo web (`dist/web`)
+- `npm run build:android`: Genera APK debug (requiere Android SDK/Studio)
 
 ## How to Play
 

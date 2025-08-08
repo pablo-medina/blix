@@ -3,11 +3,14 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
-  entry: './src/index.js',
+  entry: './src/renderer/index.ts',
   output: {
     path: path.resolve(__dirname, 'dist/web'),
     filename: 'bundle.js',
     clean: true
+  },
+  resolve: {
+    extensions: ['.ts', '.tsx', '.js']
   },
   plugins: [
     new HtmlWebpackPlugin({
@@ -23,6 +26,11 @@ module.exports = {
   ],
   module: {
     rules: [
+      {
+        test: /\.tsx?$/,
+        use: 'ts-loader',
+        exclude: /node_modules/
+      },
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader']
