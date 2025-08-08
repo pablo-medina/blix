@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // levels imported from ./game/levels
 
     // Function to create a new ball
-    function createBall(x, y, onPad = true) {
+    function createBall(x = canvas.width / 2, y = canvas.height - 30, onPad = true) {
         const ball = {
             x: x || canvas.width / 2,
             y: y || canvas.height - 30,
@@ -209,6 +209,93 @@ document.addEventListener('DOMContentLoaded', function () {
         doubleSize: 0, // Alpha for double size bar
         laser: 0 // Alpha for laser bar
     };
+
+    // --- VISUALES MODERNOS ---
+    let backgroundTime = 0; // tiempo para animaciones de fondo
+    const NEON_BOKEH_COUNT = 10;
+    const NEON_BOKEH_RADIUS_MIN = 80;
+    const NEON_BOKEH_RADIUS_MAX = 180;
+
+    function beginRoundedRectPath(
+        context: CanvasRenderingContext2D,
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+        radius: number
+    ) {
+        const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+        context.beginPath();
+        context.moveTo(x + r, y);
+        context.lineTo(x + width - r, y);
+        context.quadraticCurveTo(x + width, y, x + width, y + r);
+        context.lineTo(x + width, y + height - r);
+        context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        context.lineTo(x + r, y + height);
+        context.quadraticCurveTo(x, y + height, x, y + height - r);
+        context.lineTo(x, y + r);
+        context.quadraticCurveTo(x, y, x + r, y);
+    }
+
+    function drawNeonBackground(deltaTime: number) {
+        backgroundTime += deltaTime;
+
+        // Fondo base con gradiente sutil
+        const baseGradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        baseGradient.addColorStop(0, '#0b1020');
+        baseGradient.addColorStop(1, '#0a0f1c');
+        ctx.fillStyle = baseGradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Bokeh/luces neon animadas (modo additive)
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < NEON_BOKEH_COUNT; i++) {
+            const t = backgroundTime * (0.1 + (i % 5) * 0.03) + i * 12.345;
+            const x = (Math.sin(t) * 0.5 + 0.5) * canvas.width;
+            const y = (Math.cos(t * 0.9) * 0.5 + 0.5) * canvas.height;
+            const r = NEON_BOKEH_RADIUS_MIN + (Math.sin(t * 1.7) * 0.5 + 0.5) * (NEON_BOKEH_RADIUS_MAX - NEON_BOKEH_RADIUS_MIN);
+            const hue = (i * 36 + (backgroundTime * 10)) % 360;
+
+            const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+            g.addColorStop(0, `hsla(${hue}, 100%, 55%, 0.25)`);
+            g.addColorStop(1, 'hsla(0, 0%, 0%, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    function drawSidePanelBackground() {
+        const panelX = gameBorder.right + BORDER_THICKNESS * 0.5;
+        const panelY = gameBorder.top + BORDER_THICKNESS * 0.5;
+        const panelW = sidePanelWidth - BORDER_THICKNESS;
+        const panelH = gameBorder.bottom - gameBorder.top - BORDER_THICKNESS;
+
+        ctx.save();
+        // Sombra suave
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetY = 6;
+
+        // Panel translúcido con gradiente
+        const g = ctx.createLinearGradient(panelX, panelY, panelX + panelW, panelY + panelH);
+        g.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
+        g.addColorStop(1, 'rgba(255, 255, 255, 0.03)');
+
+        beginRoundedRectPath(ctx, panelX, panelY, panelW, panelH, 16);
+        ctx.fillStyle = g;
+        ctx.fill();
+
+        // Borde neon sutil
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(0, 200, 255, 0.35)';
+        ctx.stroke();
+        ctx.restore();
+    }
 
     // Game variables
     let gameLoopId = null; // To control the main loop
@@ -541,9 +628,9 @@ document.addEventListener('DOMContentLoaded', function () {
         let G = parseInt(color.substring(3, 5), 16);
         let B = parseInt(color.substring(5, 7), 16);
 
-        R = parseInt(R * (100 + percent) / 100);
-        G = parseInt(G * (100 + percent) / 100);
-        B = parseInt(B * (100 + percent) / 100);
+        R = Math.floor(R * (100 + percent) / 100);
+        G = Math.floor(G * (100 + percent) / 100);
+        B = Math.floor(B * (100 + percent) / 100);
 
         R = (R < 255) ? R : 255;
         G = (G < 255) ? G : 255;
@@ -741,7 +828,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Modificar la función drawBall para incluir los efectos de fuego
     function drawBall(ball) {
-        // Ball as sphere with radial gradient
+        // Ball as sphere with radial gradient + trail
         ctx.save();
 
         // Calculate ball radius based on power-up
@@ -814,6 +901,28 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.fillStyle = grad;
             ctx.fill();
         }
+        
+        // Trail sutil según velocidad
+        const speed = Math.hypot(ball.dx, ball.dy);
+        const trailLength = Math.min(30, 6 + speed * 3);
+        const vx = speed > 0 ? (ball.dx / speed) : 0;
+        const vy = speed > 0 ? (ball.dy / speed) : 0;
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 1; i <= 6; i++) {
+            const t = i / 6;
+            const tx = ball.x - vx * trailLength * t;
+            const ty = ball.y - vy * trailLength * t;
+            const alpha = 0.12 * (1 - t);
+            const r = currentRadius * (1 - 0.1 * i);
+            const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, r);
+            g.addColorStop(0, `rgba(255,255,255,${alpha})`);
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(tx, ty, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
 
         ctx.restore();
     }
@@ -1118,8 +1227,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function drawBricks() {
-        // First draw a slightly lighter background for the game area
-        ctx.fillStyle = '#1a1a2e';
+        // Lienzo del área de juego con leve gradiente
+        const areaG = ctx.createLinearGradient(gameBorder.left, gameBorder.top, gameBorder.right, gameBorder.bottom);
+        areaG.addColorStop(0, '#141a2b');
+        areaG.addColorStop(1, '#13172a');
+        ctx.fillStyle = areaG;
         ctx.fillRect(gameBorder.left, gameBorder.top, gameBorder.right - gameBorder.left, gameBorder.bottom - gameBorder.top);
 
         // Update animation timer
@@ -1217,7 +1329,25 @@ document.addEventListener('DOMContentLoaded', function () {
                         ctx.fillStyle = mainColor;
                     }
 
-                    ctx.fillRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
+                    // Ladrillo con esquinas redondeadas y gradiente
+                    const x0 = brickX, y0 = brickY, w = BRICK_WIDTH, h = BRICK_HEIGHT;
+
+                    // relleno con gradiente según color
+                    const angleSeed = (c * 13 + r * 7) % 360;
+                    const gx = x0 + w * 0.5 + Math.cos((angleSeed + now * 0.02) % 360) * w * 0.2;
+                    const gy = y0 + h * 0.5 + Math.sin((angleSeed + now * 0.02) % 360) * h * 0.2;
+                    const grad = ctx.createLinearGradient(x0, y0, gx, gy);
+                    grad.addColorStop(0, adjustColorBrightness(mainColor, 0.18));
+                    grad.addColorStop(1, adjustColorBrightness(mainColor, -0.12));
+
+                    beginRoundedRectPath(ctx, x0, y0, w, h, 6);
+                    ctx.fillStyle = grad;
+                    ctx.fill();
+
+                    // borde sutil
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = adjustColorBrightness(mainColor, -0.35);
+                    ctx.stroke();
                     ctx.shadowBlur = 0;
                 }
             }
@@ -1300,17 +1430,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function drawScore() {
-        ctx.font = 'bold 16px Arial';
-        ctx.fillStyle = '#0095DD';
+        ctx.font = '600 16px Arial';
+        ctx.fillStyle = '#e3f2fd';
         ctx.textAlign = 'left';
+        ctx.shadowColor = 'rgba(0, 200, 255, 0.35)';
+        ctx.shadowBlur = 6;
         ctx.fillText(`Score: ${score}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 16);
+        ctx.shadowBlur = 0;
     }
 
     function drawLives() {
-        ctx.font = 'bold 16px Arial';
-        ctx.fillStyle = '#0095DD';
+        ctx.font = '600 16px Arial';
+        ctx.fillStyle = '#e3f2fd';
         ctx.textAlign = 'left';
+        ctx.shadowColor = 'rgba(0, 200, 255, 0.35)';
+        ctx.shadowBlur = 6;
         ctx.fillText(`Lives: ${lives}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 55);
+        ctx.shadowBlur = 0;
     }
 
     // Función auxiliar para verificar la completación del nivel
@@ -1788,13 +1924,15 @@ document.addEventListener('DOMContentLoaded', function () {
                             launchTimeout = setTimeout(() => {
                                 launchBall();
                             }, 3000);
-                            backgroundMusic.playbackRate = 1;
-                            activePowerUps = {
-                                sizeStack: 0,
-                                speedStack: 0,
-                                invincible: false,
-                                fireBall: false
-                            };
+            backgroundMusic.playbackRate = 1;
+            activePowerUps = {
+                sizeStack: 0,
+                speedStack: 0,
+                invincible: false,
+                fireBall: false,
+                doubleSize: false,
+                laser: false
+            };
                             speedStackTimer = 0;
                             powerUps = [];
                         }, PADDLE_PARTICLE_LIFETIME * 1000);
@@ -1890,12 +2028,6 @@ document.addEventListener('DOMContentLoaded', function () {
             // Then try fullscreen
             if (canvas.requestFullscreen) {
                 canvas.requestFullscreen();
-            } else if (canvas.webkitRequestFullscreen) {
-                canvas.webkitRequestFullscreen();
-            } else if (canvas.mozRequestFullScreen) {
-                canvas.mozRequestFullScreen();
-            } else if (canvas.msRequestFullscreen) {
-                canvas.msRequestFullscreen();
             }
 
             // Adjust canvas after a short delay
@@ -1936,7 +2068,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!paused) {
                 // If unpaused, ensure loop continues
                 if (!gameLoopId) {
-                    lastFrameTime = performance.now();
+                    // Reiniciar referencia temporal del loop
+                    lastTime = performance.now();
                     gameLoopId = requestAnimationFrame(draw);
                 }
             }
@@ -1990,14 +2123,16 @@ document.addEventListener('DOMContentLoaded', function () {
             speedStack: 0,
             invincible: false,
             fireBall: false,
-            doubleSize: false
+            doubleSize: false,
+            laser: false
         };
         powerUpTimers = {
             sizeStack: 0,
             speedStack: 0,
             invincible: 0,
             fireBall: 0,
-            doubleSize: 0
+            doubleSize: 0,
+            laser: 0
         };
 
         // Reset paddle to normal size
@@ -2034,12 +2169,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function drawMenu() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        // Gradient background for menu
-        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        gradient.addColorStop(0, '#1a1a2e');
-        gradient.addColorStop(1, '#0f3460');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Fondo animado neon
+        drawNeonBackground(1 / 60);
 
         // Update animation variables
         titleHue = (titleHue + 1) % 360;
@@ -2063,7 +2194,7 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.shadowOffsetY = 5;
 
         // Main text with gradient and border
-        ctx.font = 'bold 72px Arial';
+        ctx.font = '900 72px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
@@ -2074,8 +2205,8 @@ document.addEventListener('DOMContentLoaded', function () {
         titleGradient.addColorStop(1, `hsl(${(titleHue + 120) % 360}, 100%, 60%)`);
 
         // Border of the text
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 3;
         ctx.strokeText('BLIX', 0, 0);
 
         // Text with gradient
@@ -2135,7 +2266,7 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.save();
 
             // Text of the option
-            ctx.font = isSelected ? 'bold 28px Arial' : '24px Arial';
+            ctx.font = isSelected ? '600 28px Arial' : '24px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
@@ -2178,7 +2309,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function drawGameBorders() {
         ctx.save();
 
-        // Draw game area border
+        // Borde exterior con glow sutil
+        ctx.shadowColor = 'rgba(0, 200, 255, 0.25)';
+        ctx.shadowBlur = 12;
         ctx.strokeStyle = '#2a2a3e';
         ctx.lineWidth = BORDER_THICKNESS;
         ctx.strokeRect(
@@ -2187,22 +2320,26 @@ document.addEventListener('DOMContentLoaded', function () {
             gameBorder.right - gameBorder.left + BORDER_THICKNESS,
             gameBorder.bottom - gameBorder.top + BORDER_THICKNESS
         );
+        ctx.shadowBlur = 0;
 
         // Draw barrier if active
         if (activePowerUps.invincible) {
             const alpha = powerUpTimers.invincible <= 3.0 ?
                 0.2 + 0.8 * Math.abs(Math.sin(powerUpTimers.invincible * Math.PI * 2)) : 1.0;
 
-            ctx.strokeStyle = `rgba(76, 175, 80, ${alpha})`; // Green color with alpha
-            ctx.lineWidth = 3;
-            ctx.setLineDash([5, 5]); // Dashed line
-            ctx.strokeRect(
-                gameBorder.left,
-                canvas.height - BORDER_THICKNESS / 2,
-                gameBorder.right - gameBorder.left,
-                0
-            );
-            ctx.setLineDash([]); // Reset line style
+            // Efecto de glow en la base como barrera visual
+            const height = 10;
+            ctx.globalAlpha = alpha;
+            const glowGradient = ctx.createLinearGradient(gameBorder.left, gameBorder.bottom - height, gameBorder.right, gameBorder.bottom);
+            glowGradient.addColorStop(0, 'rgba(0, 255, 200, 0.25)');
+            glowGradient.addColorStop(1, 'rgba(0, 255, 255, 0.7)');
+            ctx.fillStyle = glowGradient;
+            ctx.shadowColor = 'rgba(0, 255, 255, 0.6)';
+            ctx.shadowBlur = 10;
+            beginRoundedRectPath(ctx, gameBorder.left, gameBorder.bottom - height, gameBorder.right - gameBorder.left, height, 6);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
         }
 
         ctx.restore();
@@ -2350,8 +2487,9 @@ document.addEventListener('DOMContentLoaded', function () {
             lastFpsUpdate = now;
         }
 
-        // Clear canvas
+        // Clear canvas + fondo neon animado
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawNeonBackground(deltaTime);
 
         if (menuActive) {
             // Draw menu state
@@ -2373,6 +2511,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Draw game state
             drawBricks();
             drawGameBorders();
+            drawSidePanelBackground();
             drawEnemies();
             for (let ball of balls) {
                 drawBall(ball);
@@ -2478,7 +2617,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // 6. DISABLE MENU AND START GAME LOOP
         menuActive = false;
-        lastFrameTime = performance.now();
+        lastTime = performance.now();
         if (gameLoopId) {
             console.debug("Canceling existing gameLoopId:", gameLoopId);
             cancelAnimationFrame(gameLoopId);
@@ -2620,7 +2759,9 @@ document.addEventListener('DOMContentLoaded', function () {
             sizeStack: 0,
             speedStack: 0,
             invincible: 0,
-            fireBall: 0
+            fireBall: 0,
+            doubleSize: 0,
+            laser: 0
         };
 
         // Resetear estados de juego
@@ -2682,7 +2823,8 @@ document.addEventListener('DOMContentLoaded', function () {
             speedStack: 0,
             invincible: false,
             fireBall: false,
-            doubleSize: false
+            doubleSize: false,
+            laser: false
         };
 
         powerUpTimers = {
@@ -2690,7 +2832,8 @@ document.addEventListener('DOMContentLoaded', function () {
             speedStack: 0,
             invincible: 0,
             fireBall: 0,
-            doubleSize: 0
+            doubleSize: 0,
+            laser: 0
         };
 
         // Reset visual effects

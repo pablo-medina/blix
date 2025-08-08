@@ -5,11 +5,12 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background-color: #000;
+    background: radial-gradient(1200px 600px at 20% 10%, #0c1224 0%, #090f1d 40%, #050911 100%);
 }
 
 #game-container {
     width: 800px;
     height: 600px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    border-radius: 16px;
 } 
