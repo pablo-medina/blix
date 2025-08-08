@@ -7,5 +7,8 @@ declare global {
       close: () => void;
     };
   }
+  interface Document {
+    getElementById(elementId: string): HTMLCanvasElement | null;
+  }
 }
 
