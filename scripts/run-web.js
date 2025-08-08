@@ -3,8 +3,8 @@ const open = require('open').default;
 const path = require('path');
 const fs = require('fs');
 
-// Ejecutar webpack en modo producción
-console.log('🔄 Compilando versión web...');
+// Run webpack in production mode
+console.log('🔄 Building web version...');
 const webpackProcess = spawn('webpack', ['--mode', 'production'], {
     stdio: 'inherit',
     shell: true
@@ -16,21 +16,21 @@ webpackProcess.on('close', (code) => {
         return;
     }
 
-    // Construir la ruta al archivo index.html
+    // Build path to index.html
     const indexPath = path.resolve(__dirname, '..', 'dist', 'web', 'index.html');
     
-    // Verificar si el archivo existe
+    // Verify file exists
     if (!fs.existsSync(indexPath)) {
-        console.error('❌ Error: No se encontró index.html en', indexPath);
+        console.error('❌ Error: index.html not found at', indexPath);
         return;
     }
 
-    // Convertir a URL file://
+    // Convert path to file:// URL
     const fileUrl = `file://${indexPath.replace(/\\/g, '/')}`;
-    console.log('🌐 Abriendo URL:', fileUrl);
+    console.log('🌐 Opening URL:', fileUrl);
     
-    // Abrir en el navegador por defecto
+    // Open in default browser
     open(fileUrl).catch(err => {
-        console.error('❌ Error al abrir el navegador:', err);
+        console.error('❌ Error opening browser:', err);
     });
 }); 

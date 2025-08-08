@@ -4,30 +4,30 @@ A modern breakout game built with vanilla JavaScript and HTML5 Canvas.
 
 ## Requirements
 
-- Node.js (version 14 or higher)
-- Yarn (install with `npm install -g yarn`)
+- Node.js (version 18 or higher)
 
 ## Installation
 
 1. Clone or download this repository
 2. Open a terminal in the project folder
-3. Run `yarn install` to install dependencies
+3. Run `npm install` to install dependencies
 
 ## Available Scripts
 
 ### Development
-- `npm run start`: Launches game in Electron mode
-- `npm run start:web`: Launches game in Web mode
+- `npm run start`: Launch the game in Electron mode (builds web + main)
+- `npm run dev`: Build and launch Electron directly
+- `npm run start:web`: Build and open the Web version
 
 ### Builds
-- `npm run build`: Web + Electron para Windows por defecto
-- `npm run build:win|mac|linux`: Build por plataforma
-- `npm run build:web`: Solo web (`dist/web`)
-- `npm run build:android`: Genera APK debug (requiere Android SDK/Studio)
+- `npm run build`: Build Web + Electron for Windows by default
+- `npm run build:win|mac|linux`: Platform-specific builds
+- `npm run build:web`: Web only (`dist/web`)
+- `npm run build:android`: Generate debug APK (requires Android SDK/Studio)
 
 ## How to Play
 
-1. Run `yarn start` to launch the game
+1. Run `npm run start` to launch the game
 2. Use the left and right arrow keys or a joystick to move the paddle
 3. Break all blocks to win
 4. You have 3 lives to complete the game

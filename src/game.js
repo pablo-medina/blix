@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // let speedIncreaseTimer = 0; // timer for next increase
     // let speedMultiplier = 1.0; // base speed multiplier
 
-    // --- NIVELES ---
+    // --- LEVELS ---
     const levels = [
         [
             '               ',
@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
     let speedStackTimer = 0;
 
-    // --- MENÚ ---
+    // --- MENU ---
     const menuOptions = [
         'Start Game',
         'Mute/Unmute Music',
@@ -524,7 +524,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             window.close();
                         }
                     } catch (error) {
-                        console.error('Error al cerrar la ventana:', error);
+                        console.error('Error while trying to close the window:', error);
                         window.close();
                     }
                     break;
@@ -2087,12 +2087,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function requestFullscreen() {
         try {
-            // Intentar maximizar la ventana primero
+            // Try to maximize the window first
             if (window.electron) {
                 window.electron.maximize();
             }
 
-            // Luego intentar pantalla completa
+            // Then try fullscreen
             if (canvas.requestFullscreen) {
                 canvas.requestFullscreen();
             } else if (canvas.webkitRequestFullscreen) {
@@ -2103,10 +2103,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 canvas.msRequestFullscreen();
             }
 
-            // Ajustar el canvas después de un breve retraso
+            // Adjust canvas after a short delay
             setTimeout(adjustCanvas, 100);
         } catch (error) {
-            console.debug("Error al intentar maximizar la ventana:", error);
+            console.debug("Error while trying to maximize the window:", error);
         }
     }
 

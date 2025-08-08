@@ -1,9 +1,9 @@
 // Migrated to TypeScript: original file was src/game.js
-// Tipado laxo: tsconfig desactiva strict para permitir migración incremental
+// Loose typing: tsconfig disables strict to allow incremental migration
 // eslint-disable-next-line
 export {};
 
-// @ts-ignore - archivo grande migrado desde JS puro
+// @ts-ignore - large file migrated from plain JS
 document.addEventListener('DOMContentLoaded', function () {
     // Contenido original importado desde JS
 });

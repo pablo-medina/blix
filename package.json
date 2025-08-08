@@ -1,7 +1,7 @@
 {
   "name": "blix-game",
   "version": "1.0.0",
-  "description": "Un juego estilo Brix hecho con Electron",
+  "description": "A breakout-style game built with Electron",
   "main": "dist/electron/main.js",
   "scripts": {
     "start": "npm run build:web && npm run build:main && npx electron .",
