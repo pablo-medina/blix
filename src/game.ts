@@ -266,6 +266,17 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.fill();
         }
         ctx.restore();
+
+        // Viñeta suave para dar profundidad
+        const vignette = ctx.createRadialGradient(
+            canvas.width / 2, canvas.height / 2, canvas.width * 0.2,
+            canvas.width / 2, canvas.height / 2, canvas.width * 0.85
+        );
+        vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        vignette.addColorStop(0.6, 'rgba(0, 0, 0, 0)');
+        vignette.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     function drawSidePanelBackground() {
@@ -884,21 +895,49 @@ document.addEventListener('DOMContentLoaded', function () {
                 ));
             }
         } else {
-            // Bola normal
+            // Bola normal: glow exterior + esfera con brillo
+            ctx.shadowColor = 'rgba(200, 230, 255, 0.6)';
+            ctx.shadowBlur = currentRadius * 2.5;
+            const glowGrad = ctx.createRadialGradient(
+                ball.x, ball.y, 0,
+                ball.x, ball.y, currentRadius * 2
+            );
+            glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
+            glowGrad.addColorStop(0.5, 'rgba(200, 230, 255, 0.08)');
+            glowGrad.addColorStop(1, 'rgba(200, 230, 255, 0)');
+            ctx.fillStyle = glowGrad;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, currentRadius * 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
             const grad = ctx.createRadialGradient(
                 ball.x - currentRadius / 3,
                 ball.y - currentRadius / 3,
-                currentRadius / 4,
+                0,
                 ball.x,
                 ball.y,
                 currentRadius
             );
-            grad.addColorStop(0, '#fff');
-            grad.addColorStop(0.3, '#e0e0e0');
-            grad.addColorStop(1, '#a0a0a0');
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.15, '#f0f4ff');
+            grad.addColorStop(0.4, '#e0e8f0');
+            grad.addColorStop(1, '#9098a8');
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, currentRadius, 0, Math.PI * 2);
             ctx.fillStyle = grad;
+            ctx.fill();
+            // Pequeño brillo superior-izquierdo (reflejo)
+            const shineGrad = ctx.createRadialGradient(
+                ball.x - currentRadius * 0.4, ball.y - currentRadius * 0.4, 0,
+                ball.x - currentRadius * 0.4, ball.y - currentRadius * 0.4, currentRadius * 0.6
+            );
+            shineGrad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+            shineGrad.addColorStop(0.6, 'rgba(255, 255, 255, 0.1)');
+            shineGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = shineGrad;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, currentRadius, 0, Math.PI * 2);
             ctx.fill();
         }
         
@@ -1226,6 +1265,21 @@ document.addEventListener('DOMContentLoaded', function () {
         return peaks;
     }
 
+    function getBrickMainColor(b: { indestructible?: boolean; color?: string; hits?: number }) {
+        if (b.indestructible) return '#00ffff';
+        if (b.color === '2') return b.hits === 1 ? '#aaaaaa' : '#888888';
+        switch (b.color) {
+            case 'W': return '#f5f5f5';
+            case 'Y': return '#ffd600';
+            case 'R': return '#f44336';
+            case 'G': return '#4caf50';
+            case 'O': return '#ff9800';
+            case 'P': return '#9c27b0';
+            case '#': return '#00bcd4';
+            default: return '#f5f5f5';
+        }
+    }
+
     function drawBricks() {
         // Lienzo del área de juego con leve gradiente
         const areaG = ctx.createLinearGradient(gameBorder.left, gameBorder.top, gameBorder.right, gameBorder.bottom);
@@ -1233,6 +1287,25 @@ document.addEventListener('DOMContentLoaded', function () {
         areaG.addColorStop(1, '#13172a');
         ctx.fillStyle = areaG;
         ctx.fillRect(gameBorder.left, gameBorder.top, gameBorder.right - gameBorder.left, gameBorder.bottom - gameBorder.top);
+
+        // Rejilla sutil tipo arena
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 180, 255, 0.06)';
+        ctx.lineWidth = 1;
+        const gridStep = 48;
+        for (let gx = gameBorder.left; gx <= gameBorder.right; gx += gridStep) {
+            ctx.beginPath();
+            ctx.moveTo(gx, gameBorder.top);
+            ctx.lineTo(gx, gameBorder.bottom);
+            ctx.stroke();
+        }
+        for (let gy = gameBorder.top; gy <= gameBorder.bottom; gy += gridStep) {
+            ctx.beginPath();
+            ctx.moveTo(gameBorder.left, gy);
+            ctx.lineTo(gameBorder.right, gy);
+            ctx.stroke();
+        }
+        ctx.restore();
 
         // Update animation timer
         const now = Date.now();
@@ -1289,28 +1362,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     b.x = brickX;
                     b.y = brickY;
 
-                    // Determine block color based on type
-                    let mainColor;
-                    if (b.indestructible) {
-                        mainColor = '#00ffff'; // Cyan for indestructible
-                    } else if (b.color === '2') { // Gray block
-                        if (b.hits === 1) {
-                            mainColor = '#aaaaaa';
-                        } else {
-                            mainColor = '#888888';
-                        }
-                    } else {
-                        switch (b.color) {
-                            case 'W': mainColor = '#f5f5f5'; break; // White
-                            case 'Y': mainColor = '#ffd600'; break; // Yellow
-                            case 'R': mainColor = '#f44336'; break; // Red
-                            case 'G': mainColor = '#4caf50'; break; // Green
-                            case 'O': mainColor = '#ff9800'; break; // Orange
-                            case 'P': mainColor = '#9c27b0'; break; // Purple
-                            case '#': mainColor = '#00bcd4'; break; // Blue
-                            default: mainColor = '#f5f5f5'; // White (default)
-                        }
-                    }
+                    const mainColor = getBrickMainColor(b);
 
                     // Check if this block is being animated
                     const animatedBlock = animatedBlocks.find(block => block.c === c && block.r === r);
@@ -1349,6 +1401,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     ctx.strokeStyle = adjustColorBrightness(mainColor, -0.35);
                     ctx.stroke();
                     ctx.shadowBlur = 0;
+
+                    // Reflejo tipo cristal (línea de luz superior-izquierda)
+                    ctx.save();
+                    ctx.globalAlpha = 0.35;
+                    const refl = ctx.createLinearGradient(x0, y0, x0 + w * 0.6, y0 + h * 0.5);
+                    refl.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+                    refl.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+                    refl.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                    ctx.fillStyle = refl;
+                    beginRoundedRectPath(ctx, x0 + 2, y0 + 2, w * 0.45, h * 0.35, 4);
+                    ctx.fill();
+                    ctx.restore();
                 }
             }
         }
@@ -1375,23 +1439,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Function to create an explosion when a brick is destroyed
     function createBrickExplosion(brick) {
-        // Color according to type
-        let color;
-        if (brick.hits === 2) {
-            color = '#888';
-        } else {
-            color = '#fff';
-        }
-
-        // We no longer use particle explosions
-        // Instead, we add a fading block
+        const color = getBrickMainColor(brick);
         fadeOutBlocks.push({
             x: brick.x,
             y: brick.y,
             width: BRICK_WIDTH,
             height: BRICK_HEIGHT,
             color: color,
-            time: 1.0, // Initial life time (1.0 = 100%)
+            time: 1.0,
             originalWidth: BRICK_WIDTH,
             originalHeight: BRICK_HEIGHT
         });
@@ -1402,29 +1457,34 @@ document.addEventListener('DOMContentLoaded', function () {
         for (let i = fadeOutBlocks.length - 1; i >= 0; i--) {
             const block = fadeOutBlocks[i];
 
-            // Update life time (slower than before)
-            block.time -= 0.015; // Slower reduction to make it last longer
+            block.time -= 0.015;
 
             if (block.time <= 0) {
                 fadeOutBlocks.splice(i, 1);
                 continue;
             }
 
-            // Calculate new size (shrinks gradually)
-            const scaleFactor = 0.3 + block.time * 0.7; // Starts at 1.0 and reduces to 30% before disappearing
+            const scaleFactor = 0.3 + block.time * 0.7;
             const newWidth = block.originalWidth * scaleFactor;
             const newHeight = block.originalHeight * scaleFactor;
+            const cx = block.x + (block.originalWidth - newWidth) / 2;
+            const cy = block.y + (block.originalHeight - newHeight) / 2;
 
-            // Draw the fading block
             ctx.save();
             ctx.globalAlpha = block.time;
-            ctx.fillStyle = block.color;
-            ctx.fillRect(
-                block.x + (block.originalWidth - newWidth) / 2,
-                block.y + (block.originalHeight - newHeight) / 2,
-                newWidth,
-                newHeight
-            );
+            // Glow exterior según color del ladrillo
+            ctx.shadowColor = block.color;
+            ctx.shadowBlur = 12 + (1 - block.time) * 15;
+            beginRoundedRectPath(ctx, cx, cy, newWidth, newHeight, 6);
+            const fadGrad = ctx.createLinearGradient(cx, cy, cx + newWidth, cy + newHeight);
+            fadGrad.addColorStop(0, adjustColorBrightness(block.color, 0.25));
+            fadGrad.addColorStop(1, adjustColorBrightness(block.color, -0.15));
+            ctx.fillStyle = fadGrad;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = adjustColorBrightness(block.color, 0.2);
+            ctx.lineWidth = 1;
+            ctx.stroke();
             ctx.restore();
         }
     }
@@ -2181,35 +2241,46 @@ document.addEventListener('DOMContentLoaded', function () {
         titleScale = 1 + Math.sin(Date.now() / 500) * 0.05;
         titleAngle = Math.sin(Date.now() / 1000) * 0.05;
 
-        // Draw animated title "BLIX"
+        // Draw animated title "BLIX" con resplandor neon
         ctx.save();
         ctx.translate(canvas.width / 2, 100 + titleY);
         ctx.rotate(titleAngle);
         ctx.scale(titleScale, titleScale);
 
-        // Shadow for the title
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetX = 5;
-        ctx.shadowOffsetY = 5;
-
-        // Main text with gradient and border
         ctx.font = '900 72px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Create color gradient for the title
-        const titleGradient = ctx.createLinearGradient(-100, -40, 100, 40);
-        titleGradient.addColorStop(0, `hsl(${titleHue}, 100%, 60%)`);
-        titleGradient.addColorStop(0.5, `hsl(${(titleHue + 60) % 360}, 100%, 60%)`);
-        titleGradient.addColorStop(1, `hsl(${(titleHue + 120) % 360}, 100%, 60%)`);
+        // Capa de glow exterior (sin offset para que rodee el texto)
+        ctx.shadowColor = `hsl(${titleHue}, 100%, 50%)`;
+        ctx.shadowBlur = 28;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = `hsla(${titleHue}, 80%, 55%, 0.5)`;
+        ctx.fillText('BLIX', 0, 0);
+        ctx.shadowBlur = 0;
 
-        // Border of the text
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        // Sombra de profundidad
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 4;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillText('BLIX', 0, 0);
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+
+        // Borde blanco del texto
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
         ctx.lineWidth = 3;
         ctx.strokeText('BLIX', 0, 0);
 
-        // Text with gradient
+        // Gradiente principal del título
+        const titleGradient = ctx.createLinearGradient(-100, -40, 100, 40);
+        titleGradient.addColorStop(0, `hsl(${titleHue}, 100%, 65%)`);
+        titleGradient.addColorStop(0.5, `hsl(${(titleHue + 60) % 360}, 100%, 65%)`);
+        titleGradient.addColorStop(1, `hsl(${(titleHue + 120) % 360}, 100%, 65%)`);
         ctx.fillStyle = titleGradient;
         ctx.fillText('BLIX', 0, 0);
 
@@ -2309,16 +2380,27 @@ document.addEventListener('DOMContentLoaded', function () {
     function drawGameBorders() {
         ctx.save();
 
-        // Borde exterior con glow sutil
-        ctx.shadowColor = 'rgba(0, 200, 255, 0.25)';
-        ctx.shadowBlur = 12;
-        ctx.strokeStyle = '#2a2a3e';
+        // Borde exterior con glow neon más visible
+        const borderPulse = 0.6 + 0.2 * Math.sin(Date.now() * 0.002);
+        ctx.shadowColor = 'rgba(0, 220, 255, 0.55)';
+        ctx.shadowBlur = 22;
+        ctx.strokeStyle = '#1a1a2e';
         ctx.lineWidth = BORDER_THICKNESS;
         ctx.strokeRect(
             gameBorder.left - BORDER_THICKNESS / 2,
             gameBorder.top - BORDER_THICKNESS / 2,
             gameBorder.right - gameBorder.left + BORDER_THICKNESS,
             gameBorder.bottom - gameBorder.top + BORDER_THICKNESS
+        );
+        ctx.shadowBlur = 0;
+        // Línea interior tipo neon (borde interno del área de juego)
+        ctx.strokeStyle = `rgba(0, 230, 255, ${borderPulse * 0.45})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+            gameBorder.left + 6,
+            gameBorder.top + 6,
+            gameBorder.right - gameBorder.left - 12,
+            gameBorder.bottom - gameBorder.top - 12
         );
         ctx.shadowBlur = 0;
 
@@ -2892,28 +2974,31 @@ document.addEventListener('DOMContentLoaded', function () {
                 continue;
             }
             
-            // Draw laser with visual effects
+            // Draw laser with visual effects: glow exterior + núcleo brillante
             ctx.save();
-            
-            // Gradient for the laser
-            const gradient = ctx.createLinearGradient(laser.x, laser.y, laser.x, laser.y + laser.height);
-            gradient.addColorStop(0, 'rgba(233, 30, 99, 0.8)'); // Pink
-            gradient.addColorStop(0.5, 'rgba(233, 30, 99, 1)'); // Pink
-            gradient.addColorStop(1, 'rgba(233, 30, 99, 0.8)'); // Pink
-            
-            // Glow effect
-            ctx.shadowColor = 'rgba(233, 30, 99, 0.5)'; // Pink
-            ctx.shadowBlur = 10;
-            
-            // Draw the laser
-            ctx.fillStyle = gradient;
+            const laserPulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.02 + i);
+            // Capa exterior (glow)
+            ctx.shadowColor = 'rgba(233, 30, 99, 0.9)';
+            ctx.shadowBlur = 18;
+            const glowGrad = ctx.createLinearGradient(laser.x, laser.y, laser.x, laser.y + laser.height);
+            glowGrad.addColorStop(0, 'rgba(255, 100, 150, 0.4)');
+            glowGrad.addColorStop(0.5, 'rgba(233, 30, 99, 0.6)');
+            glowGrad.addColorStop(1, 'rgba(255, 100, 150, 0.4)');
+            ctx.fillStyle = glowGrad;
+            ctx.fillRect(laser.x - 3, laser.y - 2, laser.width + 6, laser.height + 4);
+            ctx.shadowBlur = 0;
+            // Núcleo brillante
+            const coreGrad = ctx.createLinearGradient(laser.x, laser.y, laser.x, laser.y + laser.height);
+            coreGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+            coreGrad.addColorStop(0.2, `rgba(255, 180, 220, ${laserPulse})`);
+            coreGrad.addColorStop(0.5, 'rgba(233, 30, 99, 1)');
+            coreGrad.addColorStop(0.8, `rgba(255, 180, 220, ${laserPulse})`);
+            coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0.95)');
+            ctx.fillStyle = coreGrad;
             ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
-            
-            // Glow effect
-            ctx.strokeStyle = 'rgba(233, 30, 99, 0.3)'; // Pink
-            ctx.lineWidth = 2;
-            ctx.strokeRect(laser.x - 1, laser.y, laser.width + 2, laser.height);
-            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(laser.x, laser.y, laser.width, laser.height);
             ctx.restore();
             
             // Check collisions with blocks
@@ -3131,6 +3216,127 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Helper: dibuja forma 3D con iluminación desde arriba-izquierda
+    function drawEnemy3DSphere(size: number, color: string) {
+        const r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+        const dark = `rgb(${Math.max(0, r - 80)}, ${Math.max(0, g - 80)}, ${Math.max(0, b - 80)})`;
+        const mid = color;
+        const bright = `rgb(${Math.min(255, r + 60)}, ${Math.min(255, g + 60)}, ${Math.min(255, b + 60)})`;
+        const grad = ctx.createRadialGradient(-size * 0.35, -size * 0.35, 0, 0, 0, size);
+        grad.addColorStop(0, bright);
+        grad.addColorStop(0.4, mid);
+        grad.addColorStop(0.85, dark);
+        grad.addColorStop(1, `rgb(${Math.max(0, r - 120)}, ${Math.max(0, g - 120)}, ${Math.max(0, b - 120)})`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(-size * 0.3, -size * 0.3, size * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawEnemy3DPyramid(size: number, color: string) {
+        const dark = shadeColor(color, -45);
+        const mid = color;
+        const bright = shadeColor(color, 25);
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size, size);
+        ctx.lineTo(-size, size);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, -size, 0, size);
+        grad.addColorStop(0, bright);
+        grad.addColorStop(0.5, mid);
+        grad.addColorStop(1, dark);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = shadeColor(color, 15);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function drawEnemy3DCube(size: number, color: string) {
+        const s = size * 0.9;
+        const dark = shadeColor(color, -42);
+        const mid = shadeColor(color, -8);
+        const bright = shadeColor(color, 18);
+        // Isométrico: cara izquierda, derecha, techo
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-s, s * 0.5);
+        ctx.lineTo(-s, -s * 0.5);
+        ctx.lineTo(0, -s);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = mid;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(s, s * 0.5);
+        ctx.lineTo(s, -s * 0.5);
+        ctx.lineTo(0, -s);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = bright;
+        ctx.beginPath();
+        ctx.moveTo(0, -s);
+        ctx.lineTo(s, -s * 0.5);
+        ctx.lineTo(0, 0);
+        ctx.lineTo(-s, -s * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = shadeColor(color, 8);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    function drawEnemy3DHexagon(size: number, color: string) {
+        const dark = shadeColor(color, -35);
+        const mid = color;
+        const bright = shadeColor(color, 22);
+        const depth = size * 0.4;
+        const hex = (i: number) => ({ x: Math.cos((i * Math.PI) / 3) * size, y: Math.sin((i * Math.PI) / 3) * size });
+        ctx.save();
+        ctx.translate(depth * 0.5, depth * 0.5);
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const p = hex(i);
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        const grad = ctx.createLinearGradient(0, -size, 0, size);
+        grad.addColorStop(0, bright);
+        grad.addColorStop(0.5, mid);
+        grad.addColorStop(1, dark);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const p = hex(i);
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = shadeColor(color, 12);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
     // Function to draw enemies
     function drawEnemies() {
         for (const enemy of enemies) {
@@ -3138,7 +3344,6 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.translate(enemy.x, enemy.y);
             ctx.rotate(enemy.angle);
 
-            // Calculate size and alpha for destroying enemies
             let size = enemy.type.size;
             let alpha = 1;
             if (enemy.isDestroying) {
@@ -3148,40 +3353,24 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             ctx.globalAlpha = alpha;
-            ctx.fillStyle = enemy.type.color;
             ctx.shadowColor = enemy.type.color;
-            ctx.shadowBlur = 10;
+            ctx.shadowBlur = 12;
 
             switch (enemy.type.shape) {
                 case 'circle':
-                    ctx.beginPath();
-                    ctx.arc(0, 0, size, 0, Math.PI * 2);
-                    ctx.fill();
+                    drawEnemy3DSphere(size, enemy.type.color);
                     break;
                 case 'triangle':
-                    ctx.beginPath();
-                    ctx.moveTo(0, -size);
-                    ctx.lineTo(size, size);
-                    ctx.lineTo(-size, size);
-                    ctx.closePath();
-                    ctx.fill();
+                    drawEnemy3DPyramid(size, enemy.type.color);
                     break;
                 case 'square':
-                    ctx.fillRect(-size, -size, size * 2, size * 2);
+                    drawEnemy3DCube(size, enemy.type.color);
                     break;
                 case 'hexagon':
-                    ctx.beginPath();
-                    for (let i = 0; i < 6; i++) {
-                        const angle = (i * Math.PI) / 3;
-                        const x = Math.cos(angle) * size;
-                        const y = Math.sin(angle) * size;
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
+                    drawEnemy3DHexagon(size, enemy.type.color);
                     break;
             }
+            ctx.shadowBlur = 0;
             ctx.restore();
         }
     }
