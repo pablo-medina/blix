@@ -13,4 +13,22 @@ body {
     height: 600px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(0, 180, 255, 0.08);
     border-radius: 16px;
-} 
+}
+
+#gameWebGLCanvas,
+#gameCanvas {
+    position: absolute;
+    display: block;
+    border-radius: 4px;
+}
+
+#gameWebGLCanvas {
+    z-index: 0;
+    pointer-events: none;
+    image-rendering: auto;
+    box-shadow: 0 0 60px rgba(0, 200, 255, 0.15), 0 0 120px rgba(0, 100, 180, 0.08);
+}
+
+#gameCanvas {
+    z-index: 1;
+}

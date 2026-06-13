@@ -32,6 +32,14 @@ import {
 } from './game/constants';
 import { levels } from './game/levels';
 import { shadeColor, adjustColorBrightness } from './game/utils';
+import { ThreeGameRenderer } from './rendering/ThreeGameRenderer';
+import {
+    bounceBallFromPaddle,
+    circleIntersectsRectangle,
+    resolveCircleRectangleCollision,
+    stabilizeBallTrajectory,
+    steerEnemyAwayFromWalls
+} from './game/physics';
 
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -54,6 +62,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
     canvas.width = 1280;
     canvas.height = 720;
+    const gameRenderer = new ThreeGameRenderer(canvas);
 
     // Adjust canvas size when resizing window 
     function adjustCanvas() {
@@ -84,6 +93,12 @@ document.addEventListener('DOMContentLoaded', function () {
         canvas.style.position = 'absolute';
         canvas.style.left = ((windowWidth - newWidth) / 2) + 'px';
         canvas.style.top = ((windowHeight - newHeight) / 2) + 'px';
+        gameRenderer.resize(
+            newWidth,
+            newHeight,
+            (windowWidth - newWidth) / 2,
+            (windowHeight - newHeight) / 2
+        );
 
         console.debug(`Canvas adjusted: ${newWidth}x${newHeight}`);
     }
@@ -286,24 +301,33 @@ document.addEventListener('DOMContentLoaded', function () {
         const panelH = gameBorder.bottom - gameBorder.top - BORDER_THICKNESS;
 
         ctx.save();
-        // Sombra suave
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-        ctx.shadowBlur = 20;
-        ctx.shadowOffsetY = 6;
-
-        // Panel translúcido con gradiente
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+        ctx.shadowBlur = 18;
+        ctx.shadowOffsetY = 5;
         const g = ctx.createLinearGradient(panelX, panelY, panelX + panelW, panelY + panelH);
-        g.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
-        g.addColorStop(1, 'rgba(255, 255, 255, 0.03)');
+        g.addColorStop(0, 'rgba(9, 25, 43, 0.94)');
+        g.addColorStop(0.5, 'rgba(5, 14, 27, 0.9)');
+        g.addColorStop(1, 'rgba(3, 9, 18, 0.94)');
 
         beginRoundedRectPath(ctx, panelX, panelY, panelW, panelH, 16);
         ctx.fillStyle = g;
         ctx.fill();
 
-        // Borde neon sutil
         ctx.shadowBlur = 0;
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = 'rgba(0, 200, 255, 0.35)';
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(44, 201, 255, 0.52)';
+        ctx.stroke();
+
+        ctx.font = '700 11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(126, 231, 255, 0.8)';
+        ctx.fillText('MISSION STATUS', panelX + panelW / 2, panelY + 22);
+
+        ctx.strokeStyle = 'rgba(44, 201, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(panelX + 14, panelY + 32);
+        ctx.lineTo(panelX + panelW - 14, panelY + 32);
         ctx.stroke();
         ctx.restore();
     }
@@ -1506,23 +1530,53 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function drawScore() {
-        ctx.font = '600 16px Arial';
-        ctx.fillStyle = '#e3f2fd';
+        const panelX = gameBorder.right + BORDER_THICKNESS * 0.5;
+        const panelW = sidePanelWidth - BORDER_THICKNESS;
+        const cardX = panelX + 12;
+        const cardY = gameBorder.top + 48;
+        const cardW = panelW - 24;
+
+        ctx.save();
+        beginRoundedRectPath(ctx, cardX, cardY, cardW, 52, 10);
+        ctx.fillStyle = 'rgba(18, 48, 76, 0.68)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(83, 211, 255, 0.28)';
+        ctx.stroke();
+        ctx.font = '600 10px Arial';
+        ctx.fillStyle = 'rgba(170, 225, 244, 0.78)';
         ctx.textAlign = 'left';
-        ctx.shadowColor = 'rgba(0, 200, 255, 0.35)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(`Score: ${score}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 16);
-        ctx.shadowBlur = 0;
+        ctx.fillText('SCORE', cardX + 12, cardY + 17);
+        ctx.textAlign = 'right';
+        ctx.fillText(`LEVEL ${String(currentLevel + 1).padStart(2, '0')}`, cardX + cardW - 12, cardY + 17);
+        ctx.font = '800 24px Arial';
+        ctx.fillStyle = '#f1fbff';
+        ctx.shadowColor = 'rgba(50, 205, 255, 0.55)';
+        ctx.shadowBlur = 7;
+        ctx.textAlign = 'left';
+        ctx.fillText(String(score).padStart(5, '0'), cardX + 12, cardY + 42);
+        ctx.restore();
     }
 
     function drawLives() {
-        ctx.font = '600 16px Arial';
-        ctx.fillStyle = '#e3f2fd';
+        const panelX = gameBorder.right + BORDER_THICKNESS * 0.5;
+        const panelW = sidePanelWidth - BORDER_THICKNESS;
+        const cardX = panelX + 12;
+        const cardY = gameBorder.top + 108;
+        const cardW = panelW - 24;
+
+        ctx.save();
+        beginRoundedRectPath(ctx, cardX, cardY, cardW, 36, 9);
+        ctx.fillStyle = 'rgba(9, 24, 42, 0.82)';
+        ctx.fill();
+        ctx.font = '600 10px Arial';
+        ctx.fillStyle = 'rgba(170, 225, 244, 0.78)';
         ctx.textAlign = 'left';
-        ctx.shadowColor = 'rgba(0, 200, 255, 0.35)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(`Lives: ${lives}`, gameBorder.right + BORDER_THICKNESS + PANEL_PADDING, gameBorder.top + 55);
-        ctx.shadowBlur = 0;
+        ctx.fillText('LIVES', cardX + 12, cardY + 22);
+        ctx.font = '800 18px Arial';
+        ctx.fillStyle = '#7ee7ff';
+        ctx.textAlign = 'right';
+        ctx.fillText(String(lives), cardX + cardW - 12, cardY + 24);
+        ctx.restore();
     }
 
     // Función auxiliar para verificar la completación del nivel
@@ -1555,9 +1609,12 @@ document.addEventListener('DOMContentLoaded', function () {
             for (let r = 0; r < BRICK_ROW_COUNT; r++) {
                 const b = bricks[c][r];
                 for (let ball of balls) {
-                    if ((b.status === 1 || b.indestructible) && ball.x > b.x && ball.x < b.x + BRICK_WIDTH && ball.y > b.y && ball.y < b.y + BRICK_HEIGHT) {
-                        // Calcular el radio actual de la bola
-                        const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
+                    const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
+                    const intersects = circleIntersectsRectangle(
+                        { x: ball.x, y: ball.y, radius: currentRadius },
+                        { x: b.x, y: b.y, width: BRICK_WIDTH, height: BRICK_HEIGHT }
+                    );
+                    if ((b.status === 1 || b.indestructible) && intersects) {
                         const isBigBall = activePowerUps.doubleSize;
 
                         // Lógica para bolas de fuego
@@ -1652,84 +1709,25 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Función auxiliar para manejar el rebote con físicas realistas
     function handleBounce(ball, brick) {
-        // 1. Calcular el punto de impacto relativo al centro del bloque
-        const blockCenterX = brick.x + BRICK_WIDTH / 2;
-        const blockCenterY = brick.y + BRICK_HEIGHT / 2;
-        const impactX = ball.x - blockCenterX;
-        const impactY = ball.y - blockCenterY;
+        const collisionBall = {
+            x: ball.x,
+            y: ball.y,
+            dx: ball.dx,
+            dy: ball.dy,
+            radius: activePowerUps.doubleSize ? ball.radius * 2 : ball.radius,
+            baseSpeed: ball.baseSpeed
+        };
+        const normal = resolveCircleRectangleCollision(
+            collisionBall,
+            { x: brick.x, y: brick.y, width: BRICK_WIDTH, height: BRICK_HEIGHT }
+        );
+        if (!normal) return;
+        ball.x = collisionBall.x;
+        ball.y = collisionBall.y;
+        ball.dx = collisionBall.dx;
+        ball.dy = collisionBall.dy;
 
-        // 2. Calcular la posición anterior de la bola
-        const prevX = ball.x - ball.dx;
-        const prevY = ball.y - ball.dy;
-
-        // 3. Determinar el lado de impacto basado en la trayectoria
-        let hitSide = '';
-        let normalX = 0;
-        let normalY = 0;
-
-        // Calcular las distancias a cada borde
-        const distToLeft = Math.abs(prevX - brick.x);
-        const distToRight = Math.abs(prevX - (brick.x + BRICK_WIDTH));
-        const distToTop = Math.abs(prevY - brick.y);
-        const distToBottom = Math.abs(prevY - (brick.y + BRICK_HEIGHT));
-
-        // Encontrar el borde más cercano y su vector normal
-        const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-
-        if (minDist === distToLeft) {
-            hitSide = 'left';
-            normalX = -1;
-            normalY = 0;
-            ball.x = brick.x - ball.radius;
-        } else if (minDist === distToRight) {
-            hitSide = 'right';
-            normalX = 1;
-            normalY = 0;
-            ball.x = brick.x + BRICK_WIDTH + ball.radius;
-        } else if (minDist === distToTop) {
-            hitSide = 'top';
-            normalX = 0;
-            normalY = -1;
-            ball.y = brick.y - ball.radius;
-        } else {
-            hitSide = 'bottom';
-            normalX = 0;
-            normalY = 1;
-            ball.y = brick.y + BRICK_HEIGHT + ball.radius;
-        }
-
-        // 4. Calcular el vector de velocidad actual
-        const velocityX = ball.dx;
-        const velocityY = ball.dy;
-
-        // 5. Calcular el producto punto para la reflexión
-        const dotProduct = velocityX * normalX + velocityY * normalY;
-
-        // 6. Aplicar la ley de reflexión: R = V - 2(V·N)N
-        ball.dx = velocityX - 2 * dotProduct * normalX;
-        ball.dy = velocityY - 2 * dotProduct * normalY;
-
-        // 7. Aplicar efecto de "spin" basado en el punto de impacto
-        const spinFactor = 0.15;
-        if (hitSide === 'left' || hitSide === 'right') {
-            // Spin vertical basado en la posición Y del impacto
-            const relativeY = (ball.y - brick.y) / BRICK_HEIGHT;
-            ball.dy += (relativeY - 0.5) * spinFactor * ball.baseSpeed;
-        } else {
-            // Spin horizontal basado en la posición X del impacto
-            const relativeX = (ball.x - brick.x) / BRICK_WIDTH;
-            ball.dx += (relativeX - 0.5) * spinFactor * ball.baseSpeed;
-        }
-
-        // 8. Normalizar la velocidad para mantener una velocidad constante
-        const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-        const speedFactor = ball.baseSpeed / currentSpeed;
-        ball.dx *= speedFactor;
-        ball.dy *= speedFactor;
-
-        // 9. Reproducir sonido apropiado
         if (brick.indestructible) {
             audioMetalClick.currentTime = 0;
             audioMetalClick.play();
@@ -1798,15 +1796,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function drawPowerUpBars() {
-        // Visual indicators of power-up duration with fade in/out
-        const barW = 150, barH = 10, gap = 8; // Reduced size and spacing
-        const textWidth = 60; // Ancho reservado para el texto
-        // Positioning in the side panel
-        let x = gameBorder.right + BORDER_THICKNESS + PANEL_PADDING;
-        let y = gameBorder.top + 80; // Adjusted start
+        const panelX = gameBorder.right + BORDER_THICKNESS * 0.5;
+        const panelW = sidePanelWidth - BORDER_THICKNESS;
+        const barW = panelW - 28;
+        const barH = 6;
+        const gap = 34;
+        const x = panelX + 14;
+        const y = gameBorder.top + 168;
 
         ctx.save();
-        ctx.font = '12px Arial'; // Smaller font
+        ctx.font = '700 10px Arial';
 
         // Array to store all active power-ups
         const activeBars = [];
@@ -1901,37 +1900,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (bar.type === 'Laser') powerUpBarAlpha.laser = bar.alpha;
             }
 
-            // Y position (from top to bottom)
-            const barY = y + (i * (barH + gap));
-
-            // Dibujar el texto primero
+            const barY = y + i * gap;
             ctx.globalAlpha = bar.alpha;
-            ctx.fillStyle = '#fff';
+            ctx.fillStyle = 'rgba(224, 245, 255, 0.92)';
             ctx.textAlign = 'left';
-            ctx.fillText(bar.type, x, barY + barH - 2);
+            ctx.fillText(bar.type.toUpperCase(), x, barY);
 
-            // Dibujar la barra después del texto
-            ctx.globalAlpha = bar.alpha;
-            ctx.fillStyle = bar.color;
-
-            // Calculating the maximum duration depending on the type
             let maxDuration = POWERUP_DURATION;
             if (bar.type === 'Barrier') maxDuration = INVINCIBLE_DURATION;
             else if (bar.type === 'Double') maxDuration = DOUBLE_SIZE_DURATION;
             else if (bar.type === 'Laser') maxDuration = LASER_DURATION;
 
-            // Dibujar la barra con efecto de brillo si es el láser
-            if (bar.type === 'Laser' && bar.active) {
-                ctx.shadowColor = 'rgba(233, 30, 99, 0.5)'; // Cambiado a rosa
-                ctx.shadowBlur = 10;
+            const progress = Math.max(0, Math.min(1, bar.timer / maxDuration));
+            beginRoundedRectPath(ctx, x, barY + 8, barW, barH, 3);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fill();
+            if (progress > 0) {
+                ctx.shadowColor = bar.color;
+                ctx.shadowBlur = 8;
+                beginRoundedRectPath(ctx, x, barY + 8, barW * progress, barH, 3);
+                ctx.fillStyle = bar.color;
+                ctx.fill();
             }
-
-            // Dibujar la barra después del texto
-            ctx.fillRect(x + textWidth, barY, (barW - textWidth) * (bar.timer / maxDuration), barH);
-            ctx.strokeStyle = '#222';
-            ctx.strokeRect(x + textWidth, barY, barW - textWidth, barH);
-
-            // Resetear efectos de brillo
             ctx.shadowBlur = 0;
         }
 
@@ -1942,18 +1932,16 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function for the bounce on walls with the new borders
     function handleWallCollisions() {
         for (let ball of balls) {
-            // Calcular la posición siguiente de la bola
-            const nextX = ball.x + ball.dx;
-            const nextY = ball.y + ball.dy;
             const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
+            const previousY = ball.y - ball.dy;
 
             // Colisión con bordes laterales
-            if (nextX - currentRadius < gameBorder.left) {
+            if (ball.x - currentRadius < gameBorder.left) {
                 ball.x = gameBorder.left + currentRadius;
                 ball.dx = Math.abs(ball.dx); // Asegurar que vaya hacia la derecha
                 audioBounce.currentTime = 0;
                 audioBounce.play();
-            } else if (nextX + currentRadius > gameBorder.right) {
+            } else if (ball.x + currentRadius > gameBorder.right) {
                 ball.x = gameBorder.right - currentRadius;
                 ball.dx = -Math.abs(ball.dx); // Asegurar que vaya hacia la izquierda
                 audioBounce.currentTime = 0;
@@ -1961,7 +1949,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Colisión con el techo
-            if (nextY - currentRadius < gameBorder.top) {
+            if (ball.y - currentRadius < gameBorder.top) {
                 ball.y = gameBorder.top + currentRadius;
                 ball.dy = Math.abs(ball.dy); // Asegurar que vaya hacia abajo
                 audioBounce.currentTime = 0;
@@ -1969,7 +1957,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Colisión con el suelo (solo si no hay power-up de invencibilidad)
-            if (!activePowerUps.invincible && nextY + currentRadius > canvas.height) {
+            if (!activePowerUps.invincible && ball.y + currentRadius > canvas.height) {
                 // Si no es invencible, perder la bola
                 const ballIndex = balls.indexOf(ball);
                 if (ballIndex > -1) {
@@ -2014,7 +2002,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         }, PADDLE_PARTICLE_LIFETIME * 1000);
                     }
                 }
-            } else if (activePowerUps.invincible && nextY + currentRadius > canvas.height - BORDER_THICKNESS) {
+                continue;
+            } else if (activePowerUps.invincible && ball.y + currentRadius > canvas.height - BORDER_THICKNESS) {
                 // Si es invencible, rebotar en el suelo
                 ball.y = canvas.height - BORDER_THICKNESS - currentRadius;
                 ball.dy = -Math.abs(ball.dy); // Asegurar que vaya hacia arriba
@@ -2023,73 +2012,24 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Verificar colisión con el paddle
-            if (ball.y + currentRadius <= paddle.y && nextY + currentRadius >= paddle.y) {
-                if (nextX + currentRadius > paddle.x && nextX - currentRadius < paddle.x + paddle.width) {
-                    // Calcular el punto exacto de colisión en Y
-                    ball.y = paddle.y - currentRadius;
+            const crossedPaddleTop =
+                ball.dy > 0 &&
+                previousY + currentRadius <= paddle.y &&
+                ball.y + currentRadius >= paddle.y;
+            const overlapsPaddle =
+                ball.x + currentRadius > paddle.x &&
+                ball.x - currentRadius < paddle.x + paddle.width;
+            if (crossedPaddleTop && overlapsPaddle) {
+                ball.y = paddle.y - currentRadius;
+                const paddleSpeed = rightPressed ? paddle.speed : (leftPressed ? -paddle.speed : 0);
+                bounceBallFromPaddle(
+                    ball,
+                    { x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height },
+                    paddleSpeed
+                );
 
-                    // Calcular la posición relativa de impacto (0 a 1)
-                    // Ajustar el cálculo para tener en cuenta el radio actual de la bola
-                    const relativeIntersectX = (ball.x - (paddle.x + paddle.width/2)) / (paddle.width/2);
-                    const normalizedPosition = Math.max(-1, Math.min(1, relativeIntersectX));
-
-                    // Calcular la velocidad del paddle en el momento del impacto
-                    const paddleSpeed = rightPressed ? paddle.speed : (leftPressed ? -paddle.speed : 0);
-
-                    // Calcular el ángulo base de rebote (más pronunciado en los extremos)
-                    const angleFactor = Math.sign(normalizedPosition) * Math.pow(Math.abs(normalizedPosition), 1.5);
-                    const maxBounceAngle = Math.PI / 3; // 60 grados máximo
-                    const minBounceAngle = Math.PI / 6; // 30 grados mínimo
-                    let bounceAngle = angleFactor * maxBounceAngle;
-
-                    // Asegurar que el ángulo no sea demasiado horizontal
-                    if (Math.abs(bounceAngle) < minBounceAngle) {
-                        bounceAngle = Math.sign(bounceAngle) * minBounceAngle;
-                    }
-
-                    // Aplicar efecto de "spin" basado en la velocidad del paddle
-                    const spinFactor = 0.2;
-                    const spinEffect = paddleSpeed * spinFactor;
-
-                    // Calcular la nueva velocidad
-                    const newSpeed = ball.baseSpeed;
-                    ball.dx = newSpeed * Math.sin(bounceAngle) + spinEffect;
-                    ball.dy = -Math.abs(newSpeed * Math.cos(bounceAngle));
-
-                    // Asegurar velocidad mínima
-                    const minSpeed = ball.baseSpeed * 0.8;
-                    const actualSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-                    if (actualSpeed < minSpeed) {
-                        const speedFactor = minSpeed / actualSpeed;
-                        ball.dx *= speedFactor;
-                        ball.dy *= speedFactor;
-                    }
-
-                    // Limitar velocidad máxima
-                    const maxSpeed = ball.baseSpeed * 1.2;
-                    if (actualSpeed > maxSpeed) {
-                        const speedFactor = maxSpeed / actualSpeed;
-                        ball.dx *= speedFactor;
-                        ball.dy *= speedFactor;
-                    }
-
-                    // Verificación final para asegurar que no haya rebote horizontal
-                    const finalAngle = Math.atan2(ball.dy, ball.dx);
-                    if (Math.abs(finalAngle) < minBounceAngle) {
-                        const newAngle = Math.sign(finalAngle) * minBounceAngle;
-                        const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-                        ball.dx = speed * Math.cos(newAngle);
-                        ball.dy = speed * Math.sin(newAngle);
-                    }
-
-                    // Asegurar que la componente vertical sea siempre negativa (hacia arriba)
-                    if (ball.dy > 0) {
-                        ball.dy = -ball.dy;
-                    }
-
-                    audioBounce.currentTime = 0;
-                    audioBounce.play();
-                }
+                audioBounce.currentTime = 0;
+                audioBounce.play();
             }
         }
     }
@@ -2583,6 +2523,13 @@ document.addEventListener('DOMContentLoaded', function () {
         // Enemy updates
         updateEnemies(deltaTime);
         checkEnemyCollisions();
+        for (const ball of balls) {
+            if (ball.onPad) continue;
+            const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
+            const nearPaddle = ball.y + currentRadius * 3 >= paddle.y;
+            const fallbackDirection = nearPaddle ? -1 : (ball.dy >= 0 ? 1 : -1);
+            stabilizeBallTrajectory(ball, fallbackDirection);
+        }
     }
 
     function draw() {
@@ -2600,14 +2547,15 @@ document.addEventListener('DOMContentLoaded', function () {
             lastFpsUpdate = now;
         }
 
-        // Clear canvas + fondo neon animado
+        // Keep the 2D canvas as a transparent interface layer over WebGL.
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawNeonBackground(deltaTime);
 
         if (menuActive) {
-            // Draw menu state
+            gameRenderer.setVisible(false);
             drawMenu();
         } else {
+            gameRenderer.setVisible(true);
+
             // Game state logic
             // Only update physics if not paused and not showing messages
             if (!paused && !showLevelMessage && !showGameOver) {
@@ -2621,20 +2569,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
-            // Draw game state
-            drawBricks();
-            drawGameBorders();
+            updateLaserShots();
+            gameRenderer.render({
+                balls,
+                paddle,
+                bricks,
+                powerUps,
+                laserShots,
+                enemies,
+                activePowerUps,
+                powerUpAngle,
+                isPaddleDestroyed,
+                gameBorder
+            });
+
+            // Text and interface elements stay on the lightweight 2D overlay.
             drawSidePanelBackground();
-            drawEnemies();
-            for (let ball of balls) {
-                drawBall(ball);
-            }
             updateAndDrawParticles();
-            updateAndDrawLasers();
-            drawPaddle();
+            if (isPaddleDestroyed) {
+                updateAndDrawPaddleParticles();
+            }
             drawScore();
             drawLives();
-            drawPowerUps();
             drawPowerUpBars();
 
             // Draw FPS counter (debug) only if enabled
@@ -2916,8 +2872,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (char === '2') type = 2;
                 else if (char === '3' || char === '#') type = 3; // Cyan blocks (#) are indestructible
                 bricks[c][r] = {
-                    x: 0,
-                    y: 0,
+                    x: BORDER_THICKNESS + BRICK_OFFSET_LEFT + c * (BRICK_WIDTH + BRICK_PADDING),
+                    y: BORDER_THICKNESS + BRICK_OFFSET_TOP + r * (BRICK_HEIGHT + BRICK_PADDING),
                     status: char === ' ' ? 0 : 1,
                     hits: type === 2 ? 2 : (type === 1 ? 1 : 0),
                     indestructible: type === 3,
@@ -2991,8 +2947,7 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
-    // Function to update and draw laser shots
-    function updateAndDrawLasers() {
+    function updateLaserShots() {
         for (let i = laserShots.length - 1; i >= 0; i--) {
             const laser = laserShots[i];
             
@@ -3004,33 +2959,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 laserShots.splice(i, 1);
                 continue;
             }
-            
-            // Draw laser with visual effects: glow exterior + núcleo brillante
-            ctx.save();
-            const laserPulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.02 + i);
-            // Capa exterior (glow)
-            ctx.shadowColor = 'rgba(233, 30, 99, 0.9)';
-            ctx.shadowBlur = 18;
-            const glowGrad = ctx.createLinearGradient(laser.x, laser.y, laser.x, laser.y + laser.height);
-            glowGrad.addColorStop(0, 'rgba(255, 100, 150, 0.4)');
-            glowGrad.addColorStop(0.5, 'rgba(233, 30, 99, 0.6)');
-            glowGrad.addColorStop(1, 'rgba(255, 100, 150, 0.4)');
-            ctx.fillStyle = glowGrad;
-            ctx.fillRect(laser.x - 3, laser.y - 2, laser.width + 6, laser.height + 4);
-            ctx.shadowBlur = 0;
-            // Núcleo brillante
-            const coreGrad = ctx.createLinearGradient(laser.x, laser.y, laser.x, laser.y + laser.height);
-            coreGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-            coreGrad.addColorStop(0.2, `rgba(255, 180, 220, ${laserPulse})`);
-            coreGrad.addColorStop(0.5, 'rgba(233, 30, 99, 1)');
-            coreGrad.addColorStop(0.8, `rgba(255, 180, 220, ${laserPulse})`);
-            coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0.95)');
-            ctx.fillStyle = coreGrad;
-            ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(laser.x, laser.y, laser.width, laser.height);
-            ctx.restore();
             
             // Check collisions with blocks
             for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
@@ -3129,7 +3057,9 @@ document.addEventListener('DOMContentLoaded', function () {
             destroyTime: 0,
             originalSize: type.size,
             targetBall: null,
-            targetTime: 0
+            targetTime: Math.random() * 0.8,
+            velocityX: 0,
+            velocityY: Math.max(0.5, type.speed * 0.5)
         };
     }
 
@@ -3176,19 +3106,16 @@ document.addEventListener('DOMContentLoaded', function () {
             enemy.patternTime += deltaTime;
             enemy.angle += enemy.rotationSpeed;
 
-            // Update target ball tracking
-            if (enemy.targetBall) {
-                enemy.targetTime += deltaTime;
-                if (enemy.targetTime >= 2) { // Change target every 2 seconds
-                    enemy.targetBall = null;
-                    enemy.targetTime = 0;
-                }
-            } else if (Math.random() < 0.01) { // 1% chance each frame to target a ball
+            enemy.targetTime -= deltaTime;
+            if (enemy.targetTime <= 0 || (enemy.targetBall && !balls.includes(enemy.targetBall))) {
                 const availableBalls = balls.filter(ball => !ball.onPad);
-                if (availableBalls.length > 0) {
-                    enemy.targetBall = availableBalls[Math.floor(Math.random() * availableBalls.length)];
-                    enemy.targetTime = 0;
-                }
+                enemy.targetBall = availableBalls.reduce((closest, ball) => {
+                    if (!closest) return ball;
+                    const currentDistance = Math.hypot(ball.x - enemy.x, ball.y - enemy.y);
+                    const closestDistance = Math.hypot(closest.x - enemy.x, closest.y - enemy.y);
+                    return currentDistance < closestDistance ? ball : closest;
+                }, null);
+                enemy.targetTime = 1.2 + Math.random() * 0.8;
             }
 
             // Calculate movement
@@ -3218,31 +3145,70 @@ document.addEventListener('DOMContentLoaded', function () {
             if (enemy.targetBall && !enemy.isDestroying) {
                 const targetDx = enemy.targetBall.x - enemy.x;
                 const targetDy = enemy.targetBall.y - enemy.y;
-                const dist = Math.sqrt(targetDx * targetDx + targetDy * targetDy);
+                const dist = Math.hypot(targetDx, targetDy);
                 if (dist > 0) {
-                    dx += (targetDx / dist) * enemy.speed * 0.5;
-                    dy += (targetDy / dist) * enemy.speed * 0.5;
+                    dx += (targetDx / dist) * enemy.speed * 0.42;
+                    dy += (targetDy / dist) * enemy.speed * 0.42;
                 }
             }
 
-            // Update position
-            enemy.x += dx;
-            enemy.y += dy;
-
-            // Keep enemies within game boundaries
-            if (enemy.x - enemy.type.size < gameBorder.left) {
-                enemy.x = gameBorder.left + enemy.type.size;
-                enemy.patternTime = 0;
-            } else if (enemy.x + enemy.type.size > gameBorder.right) {
-                enemy.x = gameBorder.right - enemy.type.size;
-                enemy.patternTime = 0;
+            for (const other of enemies) {
+                if (other === enemy || other.isDestroying) continue;
+                const separationX = enemy.x - other.x;
+                const separationY = enemy.y - other.y;
+                const separationDistance = Math.hypot(separationX, separationY);
+                const preferredDistance = (enemy.type.size + other.type.size) * 1.7;
+                if (separationDistance > 0 && separationDistance < preferredDistance) {
+                    const separationStrength = (1 - separationDistance / preferredDistance) * enemy.speed;
+                    dx += separationX / separationDistance * separationStrength;
+                    dy += separationY / separationDistance * separationStrength;
+                }
             }
 
-            if (enemy.y - enemy.type.size < gameBorder.top) {
-                enemy.y = gameBorder.top + enemy.type.size;
-            } else if (enemy.y + enemy.type.size > gameBorder.bottom) {
-                enemy.y = gameBorder.bottom - enemy.type.size;
-                enemy.patternTime = 0;
+            const size = enemy.type.size;
+            const movementBounds = {
+                x: gameBorder.left + size,
+                y: gameBorder.top + size,
+                width: gameBorder.right - gameBorder.left - size * 2,
+                height: gameBorder.bottom - gameBorder.top - size * 2
+            };
+            const steering = steerEnemyAwayFromWalls(
+                enemy.x,
+                enemy.y,
+                dx,
+                dy,
+                enemy.speed,
+                movementBounds,
+                Math.max(70, size * 3)
+            );
+            const smoothing = 1 - Math.pow(0.001, deltaTime);
+            enemy.velocityX += (steering.x - enemy.velocityX) * smoothing;
+            enemy.velocityY += (steering.y - enemy.velocityY) * smoothing;
+            enemy.x += enemy.velocityX;
+            enemy.y += enemy.velocityY;
+
+            const minimumX = movementBounds.x;
+            const maximumX = movementBounds.x + movementBounds.width;
+            const minimumY = movementBounds.y;
+            const maximumY = movementBounds.y + movementBounds.height;
+
+            if (enemy.x <= minimumX) {
+                enemy.x = minimumX + 0.5;
+                enemy.velocityX = Math.abs(enemy.velocityX);
+                enemy.patternTime += Math.PI * 0.35;
+            } else if (enemy.x >= maximumX) {
+                enemy.x = maximumX - 0.5;
+                enemy.velocityX = -Math.abs(enemy.velocityX);
+                enemy.patternTime += Math.PI * 0.65;
+            }
+
+            if (enemy.y <= minimumY) {
+                enemy.y = minimumY + 0.5;
+                enemy.velocityY = Math.abs(enemy.velocityY);
+            } else if (enemy.y >= maximumY) {
+                enemy.y = maximumY - 0.5;
+                enemy.velocityY = -Math.abs(enemy.velocityY);
+                enemy.patternTime += Math.PI * 0.5;
             }
         }
     }
@@ -3415,8 +3381,10 @@ document.addEventListener('DOMContentLoaded', function () {
             for (let ball of balls) {
                 const dx = ball.x - enemy.x;
                 const dy = ball.y - enemy.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < ball.radius + enemy.type.size) {
+                const distance = Math.hypot(dx, dy);
+                const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
+                const collisionDistance = currentRadius + enemy.type.size;
+                if (distance < collisionDistance) {
                     // Destruir enemigo si la bola es grande (con o sin fuego)
                     if (activePowerUps.doubleSize) {
                         enemy.isDestroying = true;
@@ -3429,10 +3397,14 @@ document.addEventListener('DOMContentLoaded', function () {
                             enemySpawnTimer = 5 + Math.random() * 5; // 5-10 segundos
                         }
                     }
-                    // En cualquier caso, hacer rebotar la bola
-                    const angle = Math.atan2(dy, dx);
-                    ball.dx = Math.cos(angle) * ball.baseSpeed;
-                    ball.dy = Math.sin(angle) * ball.baseSpeed;
+                    const speed = Math.hypot(ball.dx, ball.dy) || ball.baseSpeed;
+                    const normalX = distance > 0.0001 ? dx / distance : (ball.dx >= 0 ? 1 : -1);
+                    const normalY = distance > 0.0001 ? dy / distance : -0.25;
+                    ball.x = enemy.x + normalX * (collisionDistance + 0.1);
+                    ball.y = enemy.y + normalY * (collisionDistance + 0.1);
+                    ball.dx = normalX * speed;
+                    ball.dy = normalY * speed;
+                    stabilizeBallTrajectory(ball, ball.y >= paddle.y - currentRadius * 3 ? -1 : 1);
                     return;
                 }
             }
@@ -3471,4 +3443,4 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     }
-}); 
+});
