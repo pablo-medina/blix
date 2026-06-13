@@ -2,10 +2,7 @@ export {};
 
 declare global {
   interface Window {
-    electron?: {
-      maximize: () => void;
-      close: () => void;
-    };
+    __TAURI__?: boolean;
   }
   interface Document {
     getElementById(elementId: string): HTMLCanvasElement | null;

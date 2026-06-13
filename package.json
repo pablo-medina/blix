@@ -2,17 +2,14 @@
   "name": "blix-game",
   "version": "1.0.0",
   "description": "A breakout-style game built with Electron",
-  "main": "dist/electron/main.js",
+  "main": "index.html",
   "scripts": {
-    "start": "npm run build:web && npm run build:main && npx electron .",
-    "dev": "npm run build:web && npm run build:main && npx electron .",
+    "start": "npm run dev",
+    "dev": "npm run start:web",
+    "tauri:dev": "npm run build:web && npx tauri dev",
+    "tauri:build": "npm run build:web && npx tauri build",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "npm run build:web && npm run build:main && electron-builder build --win --publish never",
-    "build:win": "npm run build:web && npm run build:main && electron-builder build --win --publish never",
-    "build:mac": "npm run build:web && npm run build:main && electron-builder build --mac --publish never",
-    "build:linux": "npm run build:web && npm run build:main && electron-builder build --linux --publish never",
     "build:web": "webpack --mode production",
-    "build:main": "tsc -p tsconfig.electron.json",
     "start:web": "node scripts/start-web.js",
     "android:sync": "npx cap sync android",
     "android:add": "npx cap add android",
@@ -21,14 +18,13 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "electron": "^28.1.0",
     "@capacitor/core": "^6.0.0",
-    "@capacitor/android": "^6.0.0"
+    "@capacitor/android": "^6.0.0",
+    "@tauri-apps/api": "^1.5.3"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^13.0.0",
     "css-loader": "^6.8.1",
-    "electron-builder": "^24.13.3",
     "html-webpack-plugin": "^5.5.3",
     "open": "^10.1.2",
     "style-loader": "^3.3.3",
@@ -36,31 +32,9 @@
     "tsx": "^4.16.0",
     "typescript": "^5.5.4",
     "@types/node": "^22.5.0",
-    "@types/electron": "^1.6.12",
     "@capacitor/cli": "^6.0.0",
     "webpack": "^5.89.0",
-    "webpack-cli": "^5.1.4"
-  },
-  "build": {
-    "appId": "com.blix.game",
-    "productName": "Blix Game",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "dist/electron/**/*",
-      "dist/web/**/*",
-      "sounds/**/*",
-      "package.json"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "webpack-cli": "^5.1.4",
+    "@tauri-apps/cli": "^1.5.11"
   }
 }

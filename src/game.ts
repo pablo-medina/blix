@@ -407,8 +407,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     break;
                 case 3: // Exit Game
                     try {
-                        if (window.electron && typeof window.electron.close === 'function') {
-                            window.electron.close();
+                        if (window.__TAURI__) {
+                            import('@tauri-apps/api/window').then(({ appWindow }) => {
+                                appWindow.close();
+                            }).catch(console.error);
                         } else {
                             window.close();
                         }
@@ -457,10 +459,20 @@ document.addEventListener('DOMContentLoaded', function () {
     // Sounds
     const audioBounce = new Audio('sounds/pingpongbat.ogg');
     const audioBrick = new Audio('sounds/hit01.wav');
-    const audioMetalClick = new Audio('sounds/Metal Click.wav'); // New sound for indestructible blocks
+    const audioMetalClick = new Audio('sounds/MetalClick.wav'); // New sound for indestructible blocks
 
     // Background music in loop
-    const backgroundMusic = new Audio('sounds/Neon Bricks Dance.mp3');
+    const backgroundMusic = new Audio();
+    let musicShouldPlay = false;
+    fetch('sounds/NeonBricksDance.mp3')
+        .then(res => res.blob())
+        .then(blob => {
+            backgroundMusic.src = URL.createObjectURL(blob);
+            if (musicShouldPlay) {
+                backgroundMusic.play().catch(err => console.debug("Error playing fetched music:", err));
+            }
+        })
+        .catch(err => console.debug("Error loading background music:", err));
     backgroundMusic.loop = true;
     backgroundMusic.volume = 0.5; // You can adjust the volume if desired
 
@@ -469,16 +481,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Modify initBackgroundMusic function to ensure correct initialization
     function initBackgroundMusic() {       
-
-        // Try to play music
-        backgroundMusic.play().catch(error => {
-            console.debug("Error playing music, waiting for user interaction:", error);
-        });
+        musicShouldPlay = true;
+        if (backgroundMusic.src) {
+            // Try to play music
+            backgroundMusic.play().catch(error => {
+                console.debug("Error playing music, waiting for user interaction:", error);
+            });
+        }
     }
 
     // Modify click event to ensure initialization
     document.addEventListener('click', function playOnClick() {
-        if (backgroundMusic.paused) {
+        musicShouldPlay = true;
+        if (backgroundMusic.paused && backgroundMusic.src) {
             // Ensure audio is initialized            
 
             backgroundMusic.play().then(() => {
@@ -492,7 +507,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Modify keydown event to ensure initialization
     const playOnKey = function (e: KeyboardEvent) {
-        if (backgroundMusic.paused) {
+        musicShouldPlay = true;
+        if (backgroundMusic.paused && backgroundMusic.src) {
             // Ensure audio is initialized
             backgroundMusic.play().then(() => {
                 console.debug("Music started by user interaction (keyboard)");
@@ -2080,13 +2096,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function requestFullscreen() {
         try {
-            // Try to maximize the window first
-            if (window.electron) {
-                window.electron.maximize();
-            }
-
-            // Then try fullscreen
-            if (canvas.requestFullscreen) {
+            if (window.__TAURI__) {
+                import('@tauri-apps/api/window').then(({ appWindow }) => {
+                    appWindow.setFullscreen(true);
+                }).catch(console.error);
+            } else if (canvas.requestFullscreen) {
+                // Try web fullscreen if not in Tauri
                 canvas.requestFullscreen();
             }
 
@@ -2107,14 +2122,30 @@ document.addEventListener('DOMContentLoaded', function () {
                 // We are in the menu, try to close the window
                 console.debug("ESC pressed in the menu. Trying to close window...");
                 try {
-                    if (window.electron && typeof window.electron.close === 'function') {
-                        window.electron.close();
+                    if (window.__TAURI__) {
+                        import('@tauri-apps/api/window').then(({ appWindow }) => {
+                            appWindow.close();
+                        }).catch(console.error);
                     } else {
                         window.close();
                     }
                 } catch (error) {
                     console.error('Error al cerrar la ventana:', error);
                     window.close();
+                }
+            }
+        } else if (e.key === 'Enter' && e.altKey) {
+            if (window.__TAURI__) {
+                import('@tauri-apps/api/window').then(({ appWindow }) => {
+                    appWindow.isFullscreen().then(isFullscreen => {
+                        appWindow.setFullscreen(!isFullscreen);
+                    });
+                }).catch(console.error);
+            } else {
+                if (!document.fullscreenElement) {
+                    canvas.requestFullscreen().catch(err => console.debug("Fullscreen error", err));
+                } else if (document.exitFullscreen) {
+                    document.exitFullscreen();
                 }
             }
         } else if (e.key === 'r' || e.key === 'R') {
