@@ -33,6 +33,7 @@ import {
 import { levels } from './game/levels';
 import { shadeColor, adjustColorBrightness } from './game/utils';
 import { ThreeGameRenderer } from './rendering/ThreeGameRenderer';
+import { SynthAudio } from './game/SynthAudio';
 import {
     bounceBallFromPaddle,
     circleIntersectsRectangle,
@@ -337,8 +338,9 @@ document.addEventListener('DOMContentLoaded', function () {
     let menuLoopId = null; // To control the menu loop
 
     // Visual effects
-    let fadeOutBlocks: { x: number; y: number; width: number; height: number; color: string; time: number; originalWidth: number; originalHeight: number }[] = [];
+    let fadeOutBlocks: any[] = [];
     let brickExplosions: any[] = [];
+    let enemyImpactEffects: any[] = [];
 
     // Initialize bricks
     let bricks = [];
@@ -361,9 +363,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 laserShots.push(createLaserShot(paddle.x + paddle.width * 0.75, paddle.y));
                 lastLaserShot = now;
                 
-                // Play shooting sound
-                audioBounce.currentTime = 0;
-                audioBounce.play();
+                synthAudio.laser();
             }
         }
     }
@@ -381,20 +381,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!menuActive) return;
         if (e.key === 'ArrowUp') {
             selectedMenu = (selectedMenu - 1 + menuOptions.length) % menuOptions.length;
-            // Sound for menu option movement
-            audioBounce.currentTime = 0;
-            audioBounce.play().catch(err => console.debug("Error playing menu sound:", err));
+            synthAudio.menuMove();
             drawMenu();
         } else if (e.key === 'ArrowDown') {
             selectedMenu = (selectedMenu + 1) % menuOptions.length;
-            // Sound for menu option movement
-            audioBounce.currentTime = 0;
-            audioBounce.play().catch(err => console.debug("Error playing menu sound:", err));
+            synthAudio.menuMove();
             drawMenu();
         } else if (e.key === 'Enter') {
-            // Selection sound
-            audioMetalClick.currentTime = 0;
-            audioMetalClick.play().catch(err => console.debug("Error playing selection sound:", err));
+            synthAudio.menuSelect();
 
             if (showControls) {
                 showControls = false;
@@ -480,10 +474,9 @@ document.addEventListener('DOMContentLoaded', function () {
     let bottomBorderBlink = false;
     let bottomBorderAlpha = 1.0;
 
-    // Sounds
-    const audioBounce = new Audio('sounds/pingpongbat.ogg');
-    const audioBrick = new Audio('sounds/hit01.wav');
-    const audioMetalClick = new Audio('sounds/MetalClick.wav'); // New sound for indestructible blocks
+    const synthAudio = new SynthAudio();
+    document.addEventListener('pointerdown', () => synthAudio.unlock(), { passive: true });
+    document.addEventListener('keydown', () => synthAudio.unlock());
 
     // Background music in loop
     const backgroundMusic = new Audio();
@@ -1013,10 +1006,13 @@ document.addEventListener('DOMContentLoaded', function () {
     let paddleParticles = []; // Array para las partículas de desintegración del paddle
     const PADDLE_PARTICLE_COUNT = 30; // Número de partículas para la desintegración
     const PADDLE_PARTICLE_LIFETIME = 1.0; // Duración de la animación en segundos
+    let paddleExplosionPulse = 0;
 
     // Función para crear partículas de desintegración del paddle
     function createPaddleParticles() {
         paddleParticles = [];
+        paddleExplosionPulse = 1;
+        synthAudio.explosion();
         const particleSize = paddle.width / PADDLE_PARTICLE_COUNT;
         
         for (let i = 0; i < PADDLE_PARTICLE_COUNT; i++) {
@@ -1024,18 +1020,17 @@ document.addEventListener('DOMContentLoaded', function () {
             const x = paddle.x + (i * particleSize);
             const y = paddle.y + (Math.random() * paddle.height);
             
-            // Crear múltiples partículas por cada posición para más densidad
-            for (let j = 0; j < 3; j++) {
+            for (let j = 0; j < 2; j++) {
                 paddleParticles.push({
                     x: x + (Math.random() * particleSize),
                     y: y,
                     size: particleSize * (0.5 + Math.random() * 0.5),
-                    speedX: (Math.random() - 0.5) * 8,
-                    speedY: -Math.random() * 8 - 2,
+                    speedX: (Math.random() - 0.5) * 11,
+                    speedY: (Math.random() - 0.65) * 9,
                     rotation: Math.random() * Math.PI * 2,
                     rotationSpeed: (Math.random() - 0.5) * 0.2,
                     life: 1.0,
-                    color: i % 2 === 0 ? '#1976d2' : '#ff0000' // Alternar entre azul y rojo
+                    color: i % 3 === 0 ? '#ffffff' : (i % 2 === 0 ? '#20c8ff' : '#0969b8')
                 });
             }
         }
@@ -1043,12 +1038,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Función para actualizar y dibujar las partículas del paddle
     function updateAndDrawPaddleParticles() {
+        if (paddleExplosionPulse > 0) {
+            const progress = 1 - paddleExplosionPulse;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = paddleExplosionPulse;
+            ctx.strokeStyle = '#8eeeff';
+            ctx.lineWidth = 5 * paddleExplosionPulse;
+            ctx.beginPath();
+            ctx.ellipse(
+                paddle.x + paddle.width / 2,
+                paddle.y + paddle.height / 2,
+                35 + progress * 150,
+                12 + progress * 55,
+                0,
+                0,
+                Math.PI * 2
+            );
+            ctx.stroke();
+            ctx.restore();
+            paddleExplosionPulse = Math.max(0, paddleExplosionPulse - 0.035);
+        }
         for (let i = paddleParticles.length - 1; i >= 0; i--) {
             const p = paddleParticles[i];
             
             // Actualizar posición y rotación
             p.x += p.speedX;
             p.y += p.speedY;
+            p.speedY += 0.13;
+            p.speedX *= 0.988;
             p.rotation += p.rotationSpeed;
             p.life -= 0.02;
             p.size *= 0.95;
@@ -1076,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Efecto de brillo
             ctx.shadowColor = p.color;
-            ctx.shadowBlur = 5;
+            ctx.shadowBlur = 10;
             ctx.strokeStyle = shadeColor(p.color, 30);
             ctx.lineWidth = 1;
             ctx.stroke();
@@ -1480,15 +1498,38 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to create an explosion when a brick is destroyed
     function createBrickExplosion(brick) {
         const color = getBrickMainColor(brick);
+        const sourceCenterX = brick.x + BRICK_WIDTH / 2;
+        const sourceCenterY = brick.y + BRICK_HEIGHT / 2;
+        const center = gameRenderer.projectGamePoint(sourceCenterX, sourceCenterY, 14);
+        const left = gameRenderer.projectGamePoint(brick.x, sourceCenterY, 14);
+        const right = gameRenderer.projectGamePoint(brick.x + BRICK_WIDTH, sourceCenterY, 14);
+        const top = gameRenderer.projectGamePoint(sourceCenterX, brick.y, 14);
+        const bottom = gameRenderer.projectGamePoint(sourceCenterX, brick.y + BRICK_HEIGHT, 14);
+        const projectedWidth = Math.max(8, Math.abs(right.x - left.x));
+        const projectedHeight = Math.max(4, Math.abs(bottom.y - top.y));
         fadeOutBlocks.push({
-            x: brick.x,
-            y: brick.y,
-            width: BRICK_WIDTH,
-            height: BRICK_HEIGHT,
+            x: center.x - projectedWidth / 2,
+            y: center.y - projectedHeight / 2,
+            width: projectedWidth,
+            height: projectedHeight,
             color: color,
             time: 1.0,
-            originalWidth: BRICK_WIDTH,
-            originalHeight: BRICK_HEIGHT
+            originalWidth: projectedWidth,
+            originalHeight: projectedHeight,
+            shards: Array.from({ length: 9 }, (_, index) => {
+                const angle = index / 9 * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+                const speed = 2.2 + Math.random() * 4;
+                return {
+                    x: center.x + (Math.random() - 0.5) * projectedWidth * 0.45,
+                    y: center.y + (Math.random() - 0.5) * projectedHeight * 0.45,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 0.8,
+                    rotation: Math.random() * Math.PI,
+                    spin: (Math.random() - 0.5) * 0.35,
+                    width: 5 + Math.random() * 9,
+                    height: 3 + Math.random() * 5
+                };
+            })
         });
     }
 
@@ -1497,24 +1538,24 @@ document.addEventListener('DOMContentLoaded', function () {
         for (let i = fadeOutBlocks.length - 1; i >= 0; i--) {
             const block = fadeOutBlocks[i];
 
-            block.time -= 0.015;
+            block.time -= 0.026;
 
             if (block.time <= 0) {
                 fadeOutBlocks.splice(i, 1);
                 continue;
             }
 
-            const scaleFactor = 0.3 + block.time * 0.7;
+            const progress = 1 - block.time;
+            const scaleFactor = 1 + progress * 0.18;
             const newWidth = block.originalWidth * scaleFactor;
-            const newHeight = block.originalHeight * scaleFactor;
+            const newHeight = block.originalHeight * Math.max(0.08, block.time);
             const cx = block.x + (block.originalWidth - newWidth) / 2;
             const cy = block.y + (block.originalHeight - newHeight) / 2;
 
             ctx.save();
-            ctx.globalAlpha = block.time;
-            // Glow exterior según color del ladrillo
+            ctx.globalAlpha = block.time * 0.55;
             ctx.shadowColor = block.color;
-            ctx.shadowBlur = 12 + (1 - block.time) * 15;
+            ctx.shadowBlur = 18 + progress * 22;
             beginRoundedRectPath(ctx, cx, cy, newWidth, newHeight, 6);
             const fadGrad = ctx.createLinearGradient(cx, cy, cx + newWidth, cy + newHeight);
             fadGrad.addColorStop(0, adjustColorBrightness(block.color, 0.25));
@@ -1525,6 +1566,133 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.strokeStyle = adjustColorBrightness(block.color, 0.2);
             ctx.lineWidth = 1;
             ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = block.color;
+            ctx.globalAlpha = block.time * 0.7;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(
+                block.x + block.originalWidth / 2,
+                block.y + block.originalHeight / 2,
+                8 + progress * 42,
+                0,
+                Math.PI * 2
+            );
+            ctx.stroke();
+            for (const shard of block.shards) {
+                shard.x += shard.vx;
+                shard.y += shard.vy;
+                shard.vy += 0.12;
+                shard.vx *= 0.985;
+                shard.rotation += shard.spin;
+                ctx.save();
+                ctx.translate(shard.x, shard.y);
+                ctx.rotate(shard.rotation);
+                ctx.globalAlpha = block.time;
+                ctx.fillStyle = block.color;
+                ctx.shadowColor = block.color;
+                ctx.shadowBlur = 8;
+                ctx.fillRect(-shard.width / 2, -shard.height / 2, shard.width, shard.height);
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+    }
+
+    function createEnemyImpactEffect(enemy, kind: 'ball' | 'paddle', normalX = 0, normalY = -1) {
+        const contactDistance = kind === 'paddle' ? enemy.type.size * 0.75 : enemy.type.size * 0.82;
+        const contactX = enemy.x + normalX * contactDistance;
+        const contactY = enemy.y + normalY * contactDistance;
+        const center = gameRenderer.projectGamePoint(contactX, contactY, 28);
+        const edge = gameRenderer.projectGamePoint(contactX + enemy.type.size, contactY, 28);
+        const projectedSize = Math.max(12, Math.abs(edge.x - center.x));
+        const baseAngle = Math.atan2(normalY, normalX);
+        const sparkCount = kind === 'paddle' ? 20 : 12;
+
+        enemyImpactEffects.push({
+            x: center.x,
+            y: center.y,
+            color: enemy.type.color,
+            kind,
+            life: 1,
+            size: projectedSize,
+            sparks: Array.from({ length: sparkCount }, () => {
+                const spread = kind === 'paddle' ? 2.35 : 1.5;
+                const angle = baseAngle + Math.PI + (Math.random() - 0.5) * spread;
+                const speed = (kind === 'paddle' ? 4.5 : 3) + Math.random() * (kind === 'paddle' ? 5 : 3.5);
+                return {
+                    x: center.x,
+                    y: center.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - (kind === 'paddle' ? 2.2 : 0),
+                    length: 4 + Math.random() * (kind === 'paddle' ? 11 : 7)
+                };
+            })
+        });
+    }
+
+    function drawEnemyImpactEffects() {
+        for (let i = enemyImpactEffects.length - 1; i >= 0; i--) {
+            const effect = enemyImpactEffects[i];
+            effect.life -= effect.kind === 'paddle' ? 0.035 : 0.058;
+            if (effect.life <= 0) {
+                enemyImpactEffects.splice(i, 1);
+                continue;
+            }
+
+            const progress = 1 - effect.life;
+            const isPaddleImpact = effect.kind === 'paddle';
+            const radius = effect.size * (0.35 + progress * (isPaddleImpact ? 3.2 : 1.85));
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = effect.color;
+            ctx.shadowColor = effect.color;
+            ctx.shadowBlur = isPaddleImpact ? 18 : 10;
+            ctx.globalAlpha = effect.life * (isPaddleImpact ? 0.75 : 0.62);
+            ctx.lineWidth = isPaddleImpact ? 4 : 2.5;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            if (isPaddleImpact) {
+                ctx.globalAlpha = effect.life * 0.46;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(effect.x, effect.y, radius * 1.35, radius * 0.45, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = '#dffaff';
+                ctx.globalAlpha = effect.life * 0.5;
+                ctx.fillRect(effect.x - 2, effect.y - 28 - progress * 36, 4, 56 + progress * 72);
+            } else {
+                ctx.strokeStyle = '#ffffff';
+                ctx.globalAlpha = effect.life * 0.5;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, radius * 0.58, -0.9, 1.1);
+                ctx.stroke();
+            }
+
+            for (const spark of effect.sparks) {
+                spark.x += spark.vx;
+                spark.y += spark.vy;
+                spark.vx *= 0.94;
+                spark.vy = spark.vy * 0.94 + 0.08;
+                const speed = Math.hypot(spark.vx, spark.vy) || 1;
+                ctx.strokeStyle = isPaddleImpact ? '#dffaff' : effect.color;
+                ctx.globalAlpha = effect.life * 0.9;
+                ctx.lineWidth = isPaddleImpact ? 2.2 : 1.6;
+                ctx.beginPath();
+                ctx.moveTo(spark.x, spark.y);
+                ctx.lineTo(
+                    spark.x - spark.vx / speed * spark.length,
+                    spark.y - spark.vy / speed * spark.length
+                );
+                ctx.stroke();
+            }
             ctx.restore();
         }
     }
@@ -1623,8 +1791,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (!b.indestructible && b.color !== '2') {
                                 b.status = 0;
                                 score++;
-                                audioBrick.currentTime = 0;
-                                audioBrick.play();
+                                synthAudio.brick();
                                 createBrickExplosion(b);
                                 spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                             }
@@ -1633,8 +1800,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 if (isBigBall) {
                                     b.status = 0;
                                     score++;
-                                    audioBrick.currentTime = 0;
-                                    audioBrick.play();
+                                    synthAudio.brick();
                                     createBrickExplosion(b);
                                     spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                                 } else {
@@ -1645,8 +1811,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     } else {
                                         b.status = 0;
                                         score++;
-                                        audioBrick.currentTime = 0;
-                                        audioBrick.play();
+                                        synthAudio.brick();
                                         createBrickExplosion(b);
                                         spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                                     }
@@ -1658,8 +1823,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     b.status = 0;
                                     b.indestructible = false;
                                     score++;
-                                    audioBrick.currentTime = 0;
-                                    audioBrick.play();
+                                    synthAudio.brick();
                                     createBrickExplosion(b);
                                     spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                                 } else {
@@ -1668,8 +1832,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     b.status = 0;
                                     b.indestructible = false;
                                     score++;
-                                    audioBrick.currentTime = 0;
-                                    audioBrick.play();
+                                    synthAudio.brick();
                                     createBrickExplosion(b);
                                     spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                                 }
@@ -1683,16 +1846,14 @@ document.addEventListener('DOMContentLoaded', function () {
                                 } else {
                                     b.status = 0;
                                     score++;
-                                    audioBrick.currentTime = 0;
-                                    audioBrick.play();
+                                    synthAudio.brick();
                                     createBrickExplosion(b);
                                     spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                                 }
                             } else if (!b.indestructible) {
                                 b.status = 0;
                                 score++;
-                                audioBrick.currentTime = 0;
-                                audioBrick.play();
+                                synthAudio.brick();
                                 createBrickExplosion(b);
                                 spawnPowerUp(b.x + BRICK_WIDTH / 2 - 14, b.y + BRICK_HEIGHT / 2 - 14);
                             }
@@ -1729,11 +1890,9 @@ document.addEventListener('DOMContentLoaded', function () {
         ball.dy = collisionBall.dy;
 
         if (brick.indestructible) {
-            audioMetalClick.currentTime = 0;
-            audioMetalClick.play();
+            synthAudio.metal();
         } else {
-            audioBrick.currentTime = 0;
-            audioBrick.play();
+            synthAudio.brick();
         }
     }
 
@@ -1939,21 +2098,18 @@ document.addEventListener('DOMContentLoaded', function () {
             if (ball.x - currentRadius < gameBorder.left) {
                 ball.x = gameBorder.left + currentRadius;
                 ball.dx = Math.abs(ball.dx); // Asegurar que vaya hacia la derecha
-                audioBounce.currentTime = 0;
-                audioBounce.play();
+                synthAudio.bounce();
             } else if (ball.x + currentRadius > gameBorder.right) {
                 ball.x = gameBorder.right - currentRadius;
                 ball.dx = -Math.abs(ball.dx); // Asegurar que vaya hacia la izquierda
-                audioBounce.currentTime = 0;
-                audioBounce.play();
+                synthAudio.bounce();
             }
 
             // Colisión con el techo
             if (ball.y - currentRadius < gameBorder.top) {
                 ball.y = gameBorder.top + currentRadius;
                 ball.dy = Math.abs(ball.dy); // Asegurar que vaya hacia abajo
-                audioBounce.currentTime = 0;
-                audioBounce.play();
+                synthAudio.bounce();
             }
 
             // Colisión con el suelo (solo si no hay power-up de invencibilidad)
@@ -2007,8 +2163,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Si es invencible, rebotar en el suelo
                 ball.y = canvas.height - BORDER_THICKNESS - currentRadius;
                 ball.dy = -Math.abs(ball.dy); // Asegurar que vaya hacia arriba
-                audioBounce.currentTime = 0;
-                audioBounce.play();
+                synthAudio.bounce();
             }
 
             // Verificar colisión con el paddle
@@ -2028,8 +2183,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     paddleSpeed
                 );
 
-                audioBounce.currentTime = 0;
-                audioBounce.play();
+                synthAudio.bounce();
             }
         }
     }
@@ -2191,6 +2345,7 @@ document.addEventListener('DOMContentLoaded', function () {
         powerUps = [];
         brickExplosions = [];
         fadeOutBlocks = [];
+        enemyImpactEffects = [];
 
         // Reset all timers and counters
         speedStackTimer = 0;
@@ -2199,6 +2354,181 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function drawMenu() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawNeonBackground(1 / 60);
+
+        const now = performance.now() * 0.001;
+        titleHue = (titleHue + 0.35) % 360;
+        const accent = `hsl(${190 + Math.sin(now * 0.45) * 18}, 100%, 62%)`;
+        const secondary = `hsl(${315 + Math.sin(now * 0.35) * 16}, 92%, 64%)`;
+
+        ctx.save();
+        const ambient = ctx.createRadialGradient(640, 210, 20, 640, 320, 620);
+        ambient.addColorStop(0, 'rgba(16, 112, 170, 0.22)');
+        ambient.addColorStop(0.45, 'rgba(16, 34, 66, 0.14)');
+        ambient.addColorStop(1, 'rgba(1, 4, 11, 0.78)');
+        ctx.fillStyle = ambient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let index = 0; index < 18; index++) {
+            const x = (index * 113 + now * (8 + index % 4)) % (canvas.width + 100) - 50;
+            const y = 70 + (index * 79) % 570;
+            ctx.globalAlpha = 0.12 + (index % 3) * 0.04;
+            ctx.fillStyle = index % 4 === 0 ? secondary : accent;
+            ctx.fillRect(x, y, index % 4 === 0 ? 18 : 3, 1);
+        }
+        ctx.restore();
+
+        const panelX = 278;
+        const panelY = 54;
+        const panelW = 724;
+        const panelH = 612;
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.72)';
+        ctx.shadowBlur = 42;
+        beginRoundedRectPath(ctx, panelX, panelY, panelW, panelH, 26);
+        const panelGradient = ctx.createLinearGradient(panelX, panelY, panelX + panelW, panelY + panelH);
+        panelGradient.addColorStop(0, 'rgba(10, 30, 52, 0.96)');
+        panelGradient.addColorStop(0.55, 'rgba(5, 16, 31, 0.97)');
+        panelGradient.addColorStop(1, 'rgba(3, 8, 18, 0.98)');
+        ctx.fillStyle = panelGradient;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(70, 207, 255, 0.34)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.lineWidth = 1;
+        for (let y = panelY + 42; y < panelY + panelH; y += 34) {
+            ctx.beginPath();
+            ctx.moveTo(panelX + 28, y);
+            ctx.lineTo(panelX + panelW - 28, y);
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(116, 224, 255, 0.78)';
+        ctx.font = '700 12px Arial';
+        ctx.fillText('NEON DEFENSE SYSTEM // READY', panelX + 38, panelY + 38);
+
+        ctx.font = '900 78px Arial Black, Arial';
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 24;
+        const logoGradient = ctx.createLinearGradient(panelX + 38, 0, panelX + 310, 0);
+        logoGradient.addColorStop(0, '#f4fdff');
+        logoGradient.addColorStop(0.45, accent);
+        logoGradient.addColorStop(1, secondary);
+        ctx.fillStyle = logoGradient;
+        ctx.fillText('BLIX', panelX + 34, panelY + 125);
+        ctx.shadowBlur = 0;
+
+        ctx.font = '600 15px Arial';
+        ctx.fillStyle = 'rgba(191, 219, 233, 0.72)';
+        ctx.fillText('TACTICAL ARCADE // 2.5D EDITION', panelX + 40, panelY + 153);
+
+        ctx.textAlign = 'right';
+        ctx.font = '700 11px Arial';
+        ctx.fillStyle = backgroundMusic.muted ? '#ff6d92' : '#65f5c2';
+        ctx.fillText(backgroundMusic.muted ? 'AUDIO MUTED' : 'AUDIO ONLINE', panelX + panelW - 38, panelY + 42);
+        ctx.restore();
+
+        if (showControls) {
+            const controlRows = [
+                ['MOVE', 'ARROW KEYS / LEFT STICK'],
+                ['FIRE', 'SPACE / PRIMARY BUTTON'],
+                ['SELECT', 'ENTER'],
+                ['PAUSE', 'ESCAPE']
+            ];
+            ctx.save();
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#eefbff';
+            ctx.font = '800 24px Arial';
+            ctx.fillText('CONTROL SCHEME', panelX + 44, panelY + 220);
+            controlRows.forEach(([label, value], index) => {
+                const y = panelY + 266 + index * 62;
+                beginRoundedRectPath(ctx, panelX + 40, y - 28, panelW - 80, 46, 10);
+                ctx.fillStyle = 'rgba(19, 48, 76, 0.58)';
+                ctx.fill();
+                ctx.fillStyle = accent;
+                ctx.font = '800 12px Arial';
+                ctx.fillText(label, panelX + 58, y);
+                ctx.fillStyle = '#dceef6';
+                ctx.font = '600 14px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(value, panelX + panelW - 58, y);
+                ctx.textAlign = 'left';
+            });
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(157, 225, 248, 0.8)';
+            ctx.font = '600 13px Arial';
+            ctx.fillText('PRESS ENTER TO RETURN', canvas.width / 2, panelY + panelH - 34);
+            ctx.restore();
+            return;
+        }
+
+        const optionDetails = [
+            'Launch current defense protocol',
+            backgroundMusic.muted ? 'Restore soundtrack and ambience' : 'Silence soundtrack and ambience',
+            'Review command bindings',
+            'Close the application'
+        ];
+        const optionIcons = ['▶', '◉', '⌘', '×'];
+        for (let index = 0; index < menuOptions.length; index++) {
+            const selected = index === selectedMenu;
+            const x = panelX + 40;
+            const y = panelY + 190 + index * 78;
+            const width = panelW - 80;
+            const height = 62;
+            ctx.save();
+            beginRoundedRectPath(ctx, x, y, width, height, 13);
+            if (selected) {
+                const selectionGradient = ctx.createLinearGradient(x, y, x + width, y);
+                selectionGradient.addColorStop(0, 'rgba(24, 161, 220, 0.34)');
+                selectionGradient.addColorStop(0.72, 'rgba(20, 70, 105, 0.22)');
+                selectionGradient.addColorStop(1, 'rgba(229, 48, 154, 0.16)');
+                ctx.fillStyle = selectionGradient;
+                ctx.shadowColor = accent;
+                ctx.shadowBlur = 16;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = 'rgba(108, 225, 255, 0.78)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.fillStyle = accent;
+                ctx.fillRect(x, y + 11, 4, height - 22);
+            } else {
+                ctx.fillStyle = 'rgba(8, 22, 39, 0.72)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(120, 188, 218, 0.12)';
+                ctx.stroke();
+            }
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '800 20px Arial';
+            ctx.fillStyle = selected ? '#ffffff' : 'rgba(160, 205, 224, 0.72)';
+            ctx.fillText(optionIcons[index], x + 34, y + height / 2);
+            ctx.textAlign = 'left';
+            ctx.font = selected ? '800 19px Arial' : '700 17px Arial';
+            ctx.fillText(menuOptions[index].toUpperCase(), x + 68, y + 26);
+            ctx.font = '500 11px Arial';
+            ctx.fillStyle = selected ? 'rgba(190, 235, 251, 0.82)' : 'rgba(128, 168, 187, 0.58)';
+            ctx.fillText(optionDetails[index], x + 68, y + 46);
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = '600 12px Arial';
+        ctx.fillStyle = 'rgba(145, 211, 234, 0.68)';
+        ctx.fillText('↑  ↓  NAVIGATE     ENTER  CONFIRM', canvas.width / 2, panelY + panelH - 28);
+        ctx.restore();
+    }
+
+    function drawLegacyMenu() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         // Fondo animado neon
         drawNeonBackground(1 / 60);
@@ -2571,6 +2901,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             updateLaserShots();
             gameRenderer.render({
+                currentLevel,
                 balls,
                 paddle,
                 bricks,
@@ -2586,6 +2917,8 @@ document.addEventListener('DOMContentLoaded', function () {
             // Text and interface elements stay on the lightweight 2D overlay.
             drawSidePanelBackground();
             updateAndDrawParticles();
+            drawFadingBlocks();
+            drawEnemyImpactEffects();
             if (isPaddleDestroyed) {
                 updateAndDrawPaddleParticles();
             }
@@ -2744,6 +3077,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Clear visual effects
         brickExplosions = [];
         fadeOutBlocks = [];
+        enemyImpactEffects = [];
         powerUps = [];
 
         // Reset speeds and effects
@@ -2821,6 +3155,7 @@ document.addEventListener('DOMContentLoaded', function () {
         powerUps = [];
         brickExplosions = [];
         fadeOutBlocks = [];
+        enemyImpactEffects = [];
 
         // Resetear timers y contadores
         speedStackTimer = 0;
@@ -2908,6 +3243,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Reset visual effects
         brickExplosions = [];
         fadeOutBlocks = [];
+        enemyImpactEffects = [];
         powerUps = [];
 
         // Reset speeds and states
@@ -2979,8 +3315,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             // If not indestructible, destroy the block
                             brick.status = 0;
                             score++;
-                            audioBrick.currentTime = 0;
-                            audioBrick.play();
+                            synthAudio.brick();
                             createBrickExplosion(brick);
                             spawnPowerUp(brick.x + BRICK_WIDTH / 2 - 14, brick.y + BRICK_HEIGHT / 2 - 14);
                             
@@ -3059,7 +3394,9 @@ document.addEventListener('DOMContentLoaded', function () {
             targetBall: null,
             targetTime: Math.random() * 0.8,
             velocityX: 0,
-            velocityY: Math.max(0.5, type.speed * 0.5)
+            velocityY: Math.max(0.5, type.speed * 0.5),
+            impactTime: 0,
+            impactKind: null
         };
     }
 
@@ -3093,6 +3430,10 @@ document.addEventListener('DOMContentLoaded', function () {
         // Update existing enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
             const enemy = enemies[i];
+            if (enemy.impactTime > 0) {
+                enemy.impactTime = Math.max(0, enemy.impactTime - deltaTime);
+                if (enemy.impactTime === 0) enemy.impactKind = null;
+            }
             
             // Handle enemy destruction
             if (enemy.isDestroying) {
@@ -3385,12 +3726,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 const currentRadius = activePowerUps.doubleSize ? ball.radius * 2 : ball.radius;
                 const collisionDistance = currentRadius + enemy.type.size;
                 if (distance < collisionDistance) {
+                    const normalX = distance > 0.0001 ? dx / distance : (ball.dx >= 0 ? 1 : -1);
+                    const normalY = distance > 0.0001 ? dy / distance : -0.25;
+                    enemy.impactTime = 0.18;
+                    enemy.impactKind = 'ball';
+                    createEnemyImpactEffect(enemy, 'ball', normalX, normalY);
+                    synthAudio.enemyHit();
                     // Destruir enemigo si la bola es grande (con o sin fuego)
                     if (activePowerUps.doubleSize) {
                         enemy.isDestroying = true;
                         enemy.destroyTime = 0;
-                        audioBrick.currentTime = 0;
-                        audioBrick.play();
                         score += 10;
                         // Iniciar el timer para el siguiente enemigo
                         if (enemySpawnTimer <= 0) {
@@ -3398,8 +3743,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     }
                     const speed = Math.hypot(ball.dx, ball.dy) || ball.baseSpeed;
-                    const normalX = distance > 0.0001 ? dx / distance : (ball.dx >= 0 ? 1 : -1);
-                    const normalY = distance > 0.0001 ? dy / distance : -0.25;
                     ball.x = enemy.x + normalX * (collisionDistance + 0.1);
                     ball.y = enemy.y + normalY * (collisionDistance + 0.1);
                     ball.dx = normalX * speed;
@@ -3414,13 +3757,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 enemy.x + enemy.type.size > paddle.x && enemy.x - enemy.type.size < paddle.x + paddle.width) {
                 enemy.isDestroying = true;
                 enemy.destroyTime = 0;
-                audioBrick.currentTime = 0;
-                audioBrick.play();
+                enemy.impactTime = 0.32;
+                enemy.impactKind = 'paddle';
+                createEnemyImpactEffect(enemy, 'paddle', 0, 1);
+                synthAudio.enemyRam();
                 score += 10;
                 // Iniciar el timer para el siguiente enemigo
                 if (enemySpawnTimer <= 0) {
                     enemySpawnTimer = 5 + Math.random() * 5; // 5-10 segundos
                 }
+                continue;
             }
 
             // Check collision with laser
@@ -3431,8 +3777,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     enemy.isDestroying = true;
                     enemy.destroyTime = 0;
                     laserShots.splice(j, 1);
-                    audioBrick.currentTime = 0;
-                    audioBrick.play();
+                    synthAudio.explosion();
                     score += 10;
                     // Iniciar el timer para el siguiente enemigo
                     if (enemySpawnTimer <= 0) {

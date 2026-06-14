@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -48,6 +49,8 @@ export interface RenderEnemy {
     angle: number;
     isDestroying: boolean;
     destroyTime: number;
+    impactTime?: number;
+    impactKind?: 'ball' | 'paddle' | null;
     originalSize: number;
     type: {
         shape: 'circle' | 'triangle' | 'square' | 'hexagon';
@@ -57,6 +60,7 @@ export interface RenderEnemy {
 }
 
 export interface ThreeRenderState {
+    currentLevel: number;
     balls: RenderBall[];
     paddle: RenderPaddle;
     bricks: RenderBrick[][];
@@ -88,6 +92,14 @@ const MAX_BALLS = 12;
 const MAX_POWER_UPS = 4;
 const MAX_LASERS = 24;
 const MAX_ENEMIES = 4;
+const LEVEL_PALETTES = [
+    { top: 0x07182d, bottom: 0x02040b, accent: 0x00bfff, board: 0x0b1728 },
+    { top: 0x20103b, bottom: 0x07030f, accent: 0xc34cff, board: 0x1a102a },
+    { top: 0x102d29, bottom: 0x020b0a, accent: 0x2fffc1, board: 0x0b211f },
+    { top: 0x3a1710, bottom: 0x0d0402, accent: 0xff7a2f, board: 0x29130d },
+    { top: 0x29102c, bottom: 0x09020b, accent: 0xff3f9f, board: 0x210d25 },
+    { top: 0x152746, bottom: 0x020711, accent: 0x5d8cff, board: 0x0d1b35 }
+];
 
 interface BrickStyle {
     color: number;
@@ -233,7 +245,7 @@ export class ThreeGameRenderer {
     private readonly ballMeshes: THREE.Mesh[] = [];
     private readonly ballHalos: THREE.Mesh[] = [];
     private readonly powerUpVisuals: PowerUpVisual[] = [];
-    private readonly powerUpLabels: THREE.Sprite[] = [];
+    private readonly powerUpLabels: THREE.Mesh[] = [];
     private readonly laserMeshes: THREE.Mesh[] = [];
     private readonly enemyVisuals: EnemyVisual[] = [];
     private readonly enemyGeometries = new Map<string, THREE.BufferGeometry>();
@@ -244,6 +256,10 @@ export class ThreeGameRenderer {
     private readonly paddleEngineGlows: THREE.Mesh[] = [];
     private paddleCore!: THREE.Mesh;
     private paddleLightStrip!: THREE.Mesh;
+    private backdropMaterial!: THREE.ShaderMaterial;
+    private boardMaterial!: THREE.MeshPhysicalMaterial;
+    private stars!: THREE.Points;
+    private starSpeeds = new Float32Array(0);
     private readonly temporaryMatrix = new THREE.Matrix4();
     private elapsed = 0;
 
@@ -351,7 +367,9 @@ export class ThreeGameRenderer {
     }
 
     render(state: ThreeRenderState): void {
-        this.elapsed += Math.min(this.clock.getDelta(), 0.1);
+        const deltaTime = Math.min(this.clock.getDelta(), 0.1);
+        this.elapsed += deltaTime;
+        this.syncEnvironment(state.currentLevel, deltaTime);
         this.syncBricks(state);
         this.syncPaddle(state);
         this.syncBalls(state);
@@ -366,41 +384,57 @@ export class ThreeGameRenderer {
         }
     }
 
+    projectGamePoint(x: number, y: number, z = 14): { x: number; y: number } {
+        this.camera.updateMatrixWorld();
+        const projected = new THREE.Vector3(x, LOGICAL_HEIGHT - y, z).project(this.camera);
+        return {
+            x: (projected.x * 0.5 + 0.5) * LOGICAL_WIDTH,
+            y: (-projected.y * 0.5 + 0.5) * LOGICAL_HEIGHT
+        };
+    }
+
     private addEnvironment(): void {
         this.scene.fog = new THREE.FogExp2(0x02050c, 0.00075);
 
+        this.backdropMaterial = new THREE.ShaderMaterial({
+            depthWrite: false,
+            uniforms: {
+                topColor: { value: new THREE.Color(0x07182d) },
+                bottomColor: { value: new THREE.Color(0x02040b) },
+                accentColor: { value: new THREE.Color(0x00bfff) },
+                time: { value: 0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 topColor;
+                uniform vec3 bottomColor;
+                uniform vec3 accentColor;
+                uniform float time;
+                varying vec2 vUv;
+                void main() {
+                    float radial = max(0.0, 1.0 - distance(vUv, vec2(0.42, 0.58)));
+                    float waves = 0.5 + 0.5 * sin(vUv.x * 18.0 + vUv.y * 9.0 + time * 0.22);
+                    float veil = 0.5 + 0.5 * sin(vUv.x * 6.0 - vUv.y * 14.0 - time * 0.14);
+                    vec3 gradient = mix(bottomColor, topColor, vUv.y);
+                    gradient += accentColor * radial * radial * (0.055 + waves * 0.045 + veil * 0.025);
+                    gl_FragColor = vec4(gradient, 1.0);
+                }
+            `
+        });
         const backdrop = new THREE.Mesh(
             new THREE.PlaneGeometry(1500, 900),
-            new THREE.ShaderMaterial({
-                depthWrite: false,
-                uniforms: {
-                    topColor: { value: new THREE.Color(0x07182d) },
-                    bottomColor: { value: new THREE.Color(0x02040b) }
-                },
-                vertexShader: `
-                    varying vec2 vUv;
-                    void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    }
-                `,
-                fragmentShader: `
-                    uniform vec3 topColor;
-                    uniform vec3 bottomColor;
-                    varying vec2 vUv;
-                    void main() {
-                        float glow = 1.0 - distance(vUv, vec2(0.42, 0.58));
-                        vec3 gradient = mix(bottomColor, topColor, vUv.y);
-                        gradient += vec3(0.0, 0.12, 0.2) * pow(max(glow, 0.0), 4.0);
-                        gl_FragColor = vec4(gradient, 1.0);
-                    }
-                `
-            })
+            this.backdropMaterial
         );
         backdrop.position.set(640, 360, -120);
         this.scene.add(backdrop);
 
-        const boardMaterial = new THREE.MeshPhysicalMaterial({
+        this.boardMaterial = new THREE.MeshPhysicalMaterial({
             color: 0x0b1728,
             emissive: 0x031126,
             emissiveIntensity: 1.15,
@@ -408,7 +442,7 @@ export class ThreeGameRenderer {
             metalness: 0.35,
             clearcoat: 0.45
         });
-        const board = new THREE.Mesh(createBeveledBox(1032, 696, 22, 9), boardMaterial);
+        const board = new THREE.Mesh(createBeveledBox(1032, 696, 22, 9), this.boardMaterial);
         board.position.set(540, 360, -28);
         this.scene.add(board);
 
@@ -424,60 +458,64 @@ export class ThreeGameRenderer {
         const wallMaterial = new THREE.MeshPhysicalMaterial({
             color: 0x0b75a5,
             emissive: 0x00b8ff,
-            emissiveIntensity: 1.6,
-            metalness: 0.65,
-            roughness: 0.15,
-            clearcoat: 1
+            emissiveIntensity: 1.15,
+            metalness: 0.48,
+            roughness: 0.3,
+            clearcoat: 0.72,
+            clearcoatRoughness: 0.22
         });
-        const leftWall = new THREE.Mesh(createBeveledBox(18, 696, 36, 4), wallMaterial);
+        const leftWall = new THREE.Mesh(new RoundedBoxGeometry(18, 696, 36, 5, 4), wallMaterial);
         leftWall.position.set(24, 360, 24);
         this.scene.add(leftWall);
         const rightWall = leftWall.clone();
         rightWall.position.x = 1056;
         this.scene.add(rightWall);
-        const topWall = new THREE.Mesh(createBeveledBox(1032, 18, 36, 4), wallMaterial);
+        const topWall = new THREE.Mesh(new RoundedBoxGeometry(1032, 18, 36, 5, 4), wallMaterial);
         topWall.position.set(540, LOGICAL_HEIGHT - 24, 24);
         this.scene.add(topWall);
 
         const innerRailMaterial = new THREE.MeshPhysicalMaterial({
             color: 0x8beaff,
             emissive: 0x16cfff,
-            emissiveIntensity: 2.1,
-            metalness: 0.72,
-            roughness: 0.12,
-            clearcoat: 1
+            emissiveIntensity: 1.45,
+            metalness: 0.58,
+            roughness: 0.24,
+            clearcoat: 0.8,
+            clearcoatRoughness: 0.18
         });
-        const leftRail = new THREE.Mesh(createBeveledBox(4, 672, 42, 1.5), innerRailMaterial);
+        const leftRail = new THREE.Mesh(new RoundedBoxGeometry(4, 672, 42, 4, 1.5), innerRailMaterial);
         leftRail.position.set(34, 348, 30);
         this.scene.add(leftRail);
         const rightRail = leftRail.clone();
         rightRail.position.x = 1046;
         this.scene.add(rightRail);
-        const topRail = new THREE.Mesh(createBeveledBox(1012, 4, 42, 1.5), innerRailMaterial);
+        const topRail = new THREE.Mesh(new RoundedBoxGeometry(1012, 4, 42, 4, 1.5), innerRailMaterial);
         topRail.position.set(540, 686, 30);
         this.scene.add(topRail);
 
-        this.scene.add(new THREE.HemisphereLight(0xb9ecff, 0x080411, 2.5));
+        this.scene.add(new THREE.HemisphereLight(0xb9ecff, 0x080411, 2.8));
         const keyLight = new THREE.DirectionalLight(0xffffff, 4.2);
         keyLight.position.set(220, 720, 650);
         this.scene.add(keyLight);
-        const neonLight = new THREE.PointLight(0x00bfff, 520, 900, 1.7);
+        const neonLight = new THREE.PointLight(0x00bfff, 310, 900, 1.7);
         neonLight.position.set(340, 520, 260);
         this.scene.add(neonLight);
-        const accentLight = new THREE.PointLight(0xff237e, 430, 750, 1.8);
+        const accentLight = new THREE.PointLight(0xff237e, 250, 750, 1.8);
         accentLight.position.set(920, 180, 220);
         this.scene.add(accentLight);
 
         const starCount = 180;
         const positions = new Float32Array(starCount * 3);
+        this.starSpeeds = new Float32Array(starCount);
         for (let index = 0; index < starCount; index++) {
             positions[index * 3] = Math.random() * LOGICAL_WIDTH;
             positions[index * 3 + 1] = Math.random() * LOGICAL_HEIGHT;
             positions[index * 3 + 2] = -80 - Math.random() * 180;
+            this.starSpeeds[index] = 7 + Math.random() * 20;
         }
         const starsGeometry = new THREE.BufferGeometry();
         starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const stars = new THREE.Points(
+        this.stars = new THREE.Points(
             starsGeometry,
             new THREE.PointsMaterial({
                 color: 0x8bdcff,
@@ -487,7 +525,39 @@ export class ThreeGameRenderer {
                 sizeAttenuation: false
             })
         );
-        this.scene.add(stars);
+        this.scene.add(this.stars);
+    }
+
+    private syncEnvironment(level: number, deltaTime: number): void {
+        const palette = LEVEL_PALETTES[level % LEVEL_PALETTES.length];
+        const blend = 1 - Math.pow(0.015, deltaTime);
+        const topColor = this.backdropMaterial.uniforms.topColor.value as THREE.Color;
+        const bottomColor = this.backdropMaterial.uniforms.bottomColor.value as THREE.Color;
+        const accentColor = this.backdropMaterial.uniforms.accentColor.value as THREE.Color;
+        topColor.lerp(new THREE.Color(palette.top), blend);
+        bottomColor.lerp(new THREE.Color(palette.bottom), blend);
+        accentColor.lerp(new THREE.Color(palette.accent), blend);
+        this.backdropMaterial.uniforms.time.value = this.elapsed;
+        this.boardMaterial.color.lerp(new THREE.Color(palette.board), blend * 0.5);
+        this.boardMaterial.emissive.lerp(new THREE.Color(palette.accent).multiplyScalar(0.08), blend * 0.5);
+        this.scene.fog?.color.lerp(new THREE.Color(palette.bottom), blend);
+
+        const starMaterial = this.stars.material as THREE.PointsMaterial;
+        starMaterial.color.lerp(new THREE.Color(palette.accent).lerp(new THREE.Color(0xffffff), 0.35), blend);
+        const positionAttribute = this.stars.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const positions = positionAttribute.array as Float32Array;
+        for (let index = 0; index < this.starSpeeds.length; index++) {
+            const offset = index * 3;
+            positions[offset] += this.starSpeeds[index] * deltaTime * 0.18;
+            positions[offset + 1] -= this.starSpeeds[index] * deltaTime;
+            if (positions[offset + 1] < -20) {
+                positions[offset + 1] = LOGICAL_HEIGHT + Math.random() * 90;
+                positions[offset] = Math.random() * LOGICAL_WIDTH;
+            }
+            if (positions[offset] > LOGICAL_WIDTH + 20) positions[offset] = -20;
+        }
+        positionAttribute.needsUpdate = true;
+        this.stars.rotation.z = Math.sin(this.elapsed * 0.025) * 0.018;
     }
 
     private createBrickLayers(): void {
@@ -655,7 +725,7 @@ export class ThreeGameRenderer {
                 new THREE.MeshBasicMaterial({
                     color: 0x63dcff,
                     transparent: true,
-                    opacity: 0.32,
+                    opacity: 0.14,
                     blending: THREE.AdditiveBlending,
                     depthWrite: false
                 })
@@ -668,18 +738,17 @@ export class ThreeGameRenderer {
         const powerUpGeometry = createCapsuleGeometry(58, 25, 16);
         const powerUpFaceGeometry = createCapsuleGeometry(48, 15, 3);
         const powerUpGlowGeometry = new THREE.CircleGeometry(35, 28);
+        const powerUpLabelGeometry = new THREE.PlaneGeometry(42, 21);
         for (let index = 0; index < MAX_POWER_UPS; index++) {
             const group = new THREE.Group();
             const body = new THREE.Mesh(
                 powerUpGeometry,
-                new THREE.MeshPhysicalMaterial({
-                    color: 0xffffff,
+                new THREE.MeshStandardMaterial({
+                    color: 0x707070,
                     emissive: 0xffffff,
-                    emissiveIntensity: 0.7,
-                    metalness: 0.38,
-                    roughness: 0.18,
-                    clearcoat: 1,
-                    clearcoatRoughness: 0.12
+                    emissiveIntensity: 0.82,
+                    metalness: 0.1,
+                    roughness: 0.5
                 })
             );
             const face = new THREE.Mesh(
@@ -687,8 +756,7 @@ export class ThreeGameRenderer {
                 new THREE.MeshBasicMaterial({
                     color: 0xffffff,
                     transparent: true,
-                    opacity: 0.72,
-                    blending: THREE.AdditiveBlending,
+                    opacity: 0.5,
                     depthWrite: false
                 })
             );
@@ -713,20 +781,24 @@ export class ThreeGameRenderer {
             );
             glow.position.z = -6;
             glow.scale.set(1.4, 0.68, 1);
-            group.add(glow, body, face, rim);
+            group.add(body, face, rim);
             group.visible = false;
             this.powerUpVisuals.push({ group, body, face, rim, glow });
-            this.scene.add(group);
+            glow.visible = false;
+            this.scene.add(group, glow);
 
-            const label = new THREE.Sprite(new THREE.SpriteMaterial({
+            const label = new THREE.Mesh(powerUpLabelGeometry, new THREE.MeshBasicMaterial({
                 transparent: true,
-                depthTest: false,
-                depthWrite: false
+                depthTest: true,
+                depthWrite: false,
+                side: THREE.FrontSide,
+                polygonOffset: true,
+                polygonOffsetFactor: -1
             }));
-            label.scale.set(42, 21, 1);
+            label.position.z = 12;
             label.visible = false;
             this.powerUpLabels.push(label);
-            this.scene.add(label);
+            group.add(label);
         }
 
         const laserGeometry = createBeveledBox(5, 22, 8, 1);
@@ -751,7 +823,8 @@ export class ThreeGameRenderer {
                     roughness: 0.26,
                     clearcoat: 0.75,
                     clearcoatRoughness: 0.18,
-                    flatShading: true
+                    flatShading: true,
+                    transparent: true
                 })
             );
             const outline = new THREE.LineSegments(
@@ -910,7 +983,9 @@ export class ThreeGameRenderer {
             halo.scale.setScalar(radius / 8);
             const haloMaterial = halo.material as THREE.MeshBasicMaterial;
             haloMaterial.color.set(state.activePowerUps.fireBall ? 0xff5a12 : 0x63dcff);
-            haloMaterial.opacity = 0.26 + Math.sin(this.elapsed * 12 + index) * 0.08;
+            haloMaterial.opacity = state.activePowerUps.fireBall
+                ? 0.13 + Math.sin(this.elapsed * 12 + index) * 0.035
+                : 0.075 + Math.sin(this.elapsed * 12 + index) * 0.02;
         });
     }
 
@@ -919,40 +994,38 @@ export class ThreeGameRenderer {
             const powerUp = state.powerUps[index];
             const label = this.powerUpLabels[index];
             visual.group.visible = Boolean(powerUp);
-            label.visible = Boolean(powerUp);
+            visual.glow.visible = Boolean(powerUp);
             if (!powerUp) return;
 
             const x = powerUp.x + powerUp.width / 2;
             const y = LOGICAL_HEIGHT - powerUp.y - powerUp.height / 2;
-            const rollAngle = -(state.powerUpAngle * 1.65 + index * 0.72);
+            const rollAngle = state.powerUpAngle * 2.15 + index * 0.85;
             visual.group.position.set(x, y, 20);
-            visual.group.rotation.z = rollAngle;
-            visual.group.rotation.x = 0.05;
-            visual.group.rotation.y = Math.sin(state.powerUpAngle * 0.4 + index) * 0.06;
+            visual.group.rotation.set(rollAngle, 0, 0);
+            visual.glow.position.set(x, y, 8);
 
             const color = new THREE.Color(powerUp.color);
-            const bodyMaterial = visual.body.material as THREE.MeshPhysicalMaterial;
-            bodyMaterial.color.copy(color);
-            bodyMaterial.emissive.copy(color).multiplyScalar(0.42);
-            bodyMaterial.emissiveIntensity = 1.05;
+            const bodyMaterial = visual.body.material as THREE.MeshStandardMaterial;
+            bodyMaterial.color.copy(color).multiplyScalar(0.52);
+            bodyMaterial.emissive.copy(color).multiplyScalar(0.72);
+            bodyMaterial.emissiveIntensity = 0.86;
             const faceMaterial = visual.face.material as THREE.MeshBasicMaterial;
-            faceMaterial.color.copy(color).lerp(new THREE.Color(0xffffff), 0.35);
+            faceMaterial.color.copy(color).lerp(new THREE.Color(0xffffff), 0.28);
             const rimMaterial = visual.rim.material as THREE.LineBasicMaterial;
             rimMaterial.color.copy(color).lerp(new THREE.Color(0xffffff), 0.58);
             const glowMaterial = visual.glow.material as THREE.MeshBasicMaterial;
             glowMaterial.color.copy(color);
-            glowMaterial.opacity = 0.12 + Math.sin(this.elapsed * 6 + index) * 0.04;
+            glowMaterial.opacity = 0.052;
             visual.glow.scale.set(
-                1.35 + Math.sin(this.elapsed * 5 + index) * 0.08,
-                0.64 + Math.sin(this.elapsed * 5 + index) * 0.04,
+                1.28,
+                0.58,
                 1
             );
 
-            const labelMaterial = label.material as THREE.SpriteMaterial;
+            const labelMaterial = label.material as THREE.MeshBasicMaterial;
             labelMaterial.map = this.getPowerUpTexture(powerUp.type);
-            labelMaterial.rotation = rollAngle;
             labelMaterial.needsUpdate = true;
-            label.position.set(x, y, 34);
+            label.visible = true;
         });
     }
 
@@ -1002,16 +1075,44 @@ export class ThreeGameRenderer {
                 satelliteMaterial.color.set(enemy.type.color).lerp(new THREE.Color(0xffffff), 0.48);
             });
 
-            const destructionScale = enemy.isDestroying
-                ? Math.max(0, 1 - enemy.destroyTime / 0.5)
-                : 1;
+            const destructionProgress = enemy.isDestroying
+                ? Math.min(1, enemy.destroyTime / 0.5)
+                : 0;
+            const impactDuration = enemy.impactKind === 'paddle' ? 0.32 : 0.18;
+            const impactStrength = Math.min(1, Math.max(0, (enemy.impactTime ?? 0) / impactDuration));
+            const impactPulse = Math.sin(impactStrength * Math.PI);
+            const collapse = 1 - Math.pow(destructionProgress, 1.5);
+            const burst = Math.sin(destructionProgress * Math.PI);
+            const impactScale = 1 + impactPulse * (enemy.impactKind === 'paddle' ? 0.28 : 0.16);
             visual.group.position.set(enemy.x, LOGICAL_HEIGHT - enemy.y, 24);
-            visual.group.rotation.set(0, 0, -enemy.angle);
-            visual.group.scale.setScalar(destructionScale);
-            visual.halo.scale.setScalar(1 + Math.sin(this.elapsed * 5 + index) * 0.08);
-            haloMaterial.opacity = 0.12 + Math.sin(this.elapsed * 4 + index) * 0.04;
-            visual.core.scale.setScalar(0.9 + Math.sin(this.elapsed * 7 + index) * 0.12);
-            visual.ring.rotation.z = this.elapsed * (index % 2 === 0 ? 1.8 : -1.8);
+            visual.group.rotation.set(
+                destructionProgress * 0.9,
+                destructionProgress * 1.4,
+                -enemy.angle + destructionProgress * Math.PI * 3
+            );
+            visual.group.scale.set(
+                collapse * (1 + burst * 0.25) * impactScale,
+                collapse * (1 - burst * 0.18) * (1 - impactPulse * 0.08),
+                collapse * impactScale
+            );
+            material.emissiveIntensity = 0.75 + impactPulse * 2.2;
+            material.opacity = 1 - destructionProgress;
+            outlineMaterial.opacity = 0.8 * (1 - destructionProgress);
+            visual.halo.scale.setScalar(
+                enemy.isDestroying
+                    ? 1 + destructionProgress * 3.8
+                    : 1 + Math.sin(this.elapsed * 5 + index) * 0.08
+            );
+            haloMaterial.opacity = enemy.isDestroying
+                ? (1 - destructionProgress) * 0.42
+                : 0.12 + Math.sin(this.elapsed * 4 + index) * 0.04;
+            visual.core.scale.setScalar(
+                enemy.isDestroying
+                    ? 0.9 + burst * 2.8
+                    : 0.9 + Math.sin(this.elapsed * 7 + index) * 0.12 + impactPulse * 0.75
+            );
+            coreMaterial.opacity = enemy.isDestroying ? 1 - destructionProgress : 0.9;
+            visual.ring.rotation.z = this.elapsed * (index % 2 === 0 ? 1.8 : -1.8) + destructionProgress * 8;
             visual.ring.scale.set(
                 1 + Math.sin(this.elapsed * 3 + index) * 0.08,
                 0.82 + Math.cos(this.elapsed * 3 + index) * 0.05,
@@ -1019,10 +1120,11 @@ export class ThreeGameRenderer {
             );
             visual.satellites.forEach((satellite, satelliteIndex) => {
                 const orbitAngle = this.elapsed * (1.4 + index * 0.12) + satelliteIndex * Math.PI * 2 / 3;
-                const orbitRadius = enemy.type.size * 0.76;
+                const orbitRadius = enemy.type.size * (0.76 + destructionProgress * 3.2);
                 satellite.position.x = Math.cos(orbitAngle) * orbitRadius;
                 satellite.position.y = Math.sin(orbitAngle) * orbitRadius;
                 satellite.rotation.z = orbitAngle;
+                satellite.scale.setScalar(1 - destructionProgress * 0.75);
             });
         });
     }
